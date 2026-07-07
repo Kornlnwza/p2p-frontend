@@ -1,40 +1,51 @@
-// 1. สร้าง Type สำหรับผู้ใช้งาน (ดึงเฉพาะฟิลด์ที่ต้องใช้เช็คสิทธิ์)
-interface AuthUser {
+// 1. ปรับ Type ให้รองรับ user_id
+export interface AuthUser {
+  user_id: number; // 🌟 ใช้ ID เพื่อความแม่นยำ 100%
   username: string;
   role: string;
   department?: string;
 }
 
-// 2. สร้าง Type สำหรับข้อมูล PR
-interface PRData {
-  requester_name?: string; // หมายเหตุ: ถ้าใน Database ใช้ชื่ออื่น เช่น created_by_name ให้แก้ตรงนี้ให้ตรงกันนะครับ
+// 2. ปรับ Type ให้ตรงกับข้อมูลจริงของ PR
+export interface PRData {
+  pr_no?: string;
+  requester_id?: number; // 🌟 ใช้ ID ตรงกับ Backend
   department?: string;
+  status?: string; // 🌟 ต้องมี status เอาไว้เช็ค
 }
 
-// 3. นำ Type มาใส่แทนคำว่า any
-export const canApprovePR = (
-  currentUser: AuthUser | null,
-  pr: PRData | null,
-): boolean => {
-  // ป้องกัน Error กรณีข้อมูลถูกโหลดไม่ทัน
+export const canApprovePR = (currentUser: AuthUser, pr: PRData): boolean => {
   if (!currentUser || !pr) return false;
 
-  // กฎเหล็ก: ห้ามอนุมัติของตัวเอง
-  if (currentUser.username === pr.requester_name) return false;
+  // 1. เช็คสถานะ (เน้นความปลอดภัย)
+  if (pr.status?.toLowerCase() !== "pending") return false;
 
-  // Admin อนุมัติได้หมด
-  if (currentUser.role === "Admin") return true;
+  // 2. ห้ามอนุมัติของตัวเอง
+  if (currentUser.user_id === pr.requester_id) return false;
 
-  // Head ทั่วไป อนุมัติแผนกตัวเอง
-  if (currentUser.role === "Head" && currentUser.department === pr.department)
+  // 3. Admin ทำได้ทุกอย่าง
+  if (currentUser.role === "Admin" || currentUser.role === "Manager")
     return true;
 
-  // Role พิเศษ ทำหน้าที่แทน Head ในแผนกตัวเอง
-  if (currentUser.role === "Finance_Head" && pr.department === "Accounting")
+  // 4. กฎสำหรับ Head (ปรับปรุงให้รองรับ case-insensitive และป้องกัน undefined)
+  if (currentUser.role === "Head") {
+    const userDept = currentUser.department?.toLowerCase() || "";
+    const prDept = pr.department?.toLowerCase() || "";
+
+    // ถ้าแผนกตรงกัน
+    return userDept === prDept;
+  }
+
+  // 5. กรณีมี Role เฉพาะเจาะจงที่ระบุไว้ก่อนหน้า
+  if (
+    currentUser.role === "Finance_Head" &&
+    pr.department?.toLowerCase() === "accounting"
+  )
     return true;
-  if (currentUser.role === "Purchaser_Head" && pr.department === "Purchasing")
-    return true;
-  if (currentUser.role === "Receiver_Head" && pr.department === "Warehouse")
+  if (
+    currentUser.role === "Purchaser_Head" &&
+    pr.department?.toLowerCase() === "purchasing"
+  )
     return true;
 
   return false;

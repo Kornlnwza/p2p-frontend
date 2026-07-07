@@ -54,8 +54,12 @@ export default function Dashboard() {
     const role = currentUser?.role?.toLowerCase() || "";
 
     if (role === "admin") return "admin"; // แอดมิน
-    if (role === "receiver" || role === "warehouse") return "warehouse"; // คลังสินค้า
-    if (role === "finance") return "finance"; // บัญชี
+
+    if (role === "receiver" || role === "warehouse" || role === "receiver_head")
+      return "warehouse"; // คลังสินค้า
+
+    if (role === "finance" || role === "finance_head") return "finance"; // บัญชี
+
     return "head"; // นอกนั้น (Head, Purchaser, Requester) ให้เห็นภาพรวมงบประมาณ
   };
 
