@@ -62,7 +62,6 @@ export default function PRListPage() {
   // State สำหรับ Print
   const printRef = useRef<HTMLDivElement>(null);
   const [prToPrint, setPrToPrint] = useState<PRData | null>(null);
-  const [currentPrintTime, setCurrentPrintTime] = useState("");
 
   const fetchPRs = async () => {
     setIsLoading(true);
@@ -116,7 +115,6 @@ export default function PRListPage() {
     try {
       const response = await api.get(`/pr/${pr.pr_no}`);
       setPrToPrint({ ...pr, items: response.data });
-      setCurrentPrintTime(new Date().toLocaleString("th-TH"));
       setTimeout(() => {
         handlePrintTrigger();
       }, 500);
@@ -930,12 +928,6 @@ export default function PRListPage() {
                     วันที่: ______/______/______
                   </p>
                 </div>
-              </div>
-
-              {/* Footer แจ้งเวลาพิมพ์ */}
-              <div className="absolute bottom-10 left-10 right-10 text-center text-[10px] text-slate-400 border-t border-slate-200 pt-3">
-                เอกสารฉบับนี้พิมพ์จากระบบ P2P System เมื่อวันที่{" "}
-                {currentPrintTime}
               </div>
             </>
           )}
