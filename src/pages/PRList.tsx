@@ -533,7 +533,7 @@ export default function PRListPage() {
                       )}
                     </div>
                   </div>
-                  <div className="bg-white p-5 border border-slate-200 rounded-2xl shadow-sm">
+                  <div className="col-span-2 md:col-span-4 bg-white p-5 border border-slate-200 rounded-2xl shadow-sm">
                     <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">
                       หมายเหตุ / เหตุผลการขอซื้อ (Remark)
                     </p>
@@ -662,7 +662,7 @@ export default function PRListPage() {
       <div style={{ display: "none" }}>
         <div
           ref={printRef}
-          className="p-10 bg-white text-black font-sans w-[210mm] min-h-[297mm] mx-auto text-sm relative"
+          className="p-10 bg-white text-black font-sans w-[210mm] min-h-[297mm] mx-auto text-sm relative flex flex-col"
         >
           {prToPrint && (
             <>
@@ -710,14 +710,6 @@ export default function PRListPage() {
                           {prToPrint.department}
                         </td>
                       </tr>
-                      <div className="mt-4 border border-slate-800 p-4 min-h-[80px]">
-                        <p className="font-bold text-xs text-slate-800 underline mb-2 uppercase">
-                          หมายเหตุ / เหตุผลการขอซื้อ (Remark):
-                        </p>
-                        <p className="text-xs text-slate-700 leading-relaxed">
-                          {prToPrint.remark || "-"}
-                        </p>
-                      </div>
                     </tbody>
                   </table>
                 </div>
@@ -881,8 +873,36 @@ export default function PRListPage() {
                 </tfoot>
               </table>
 
+              <div className="mt-4 mb-8 border border-slate-800 p-4 min-h-[80px]">
+                <p className="font-bold text-xs text-slate-800 underline mb-2 uppercase">
+                  หมายเหตุ / เหตุผลการขอซื้อ (Remark):
+                </p>
+                <p className="text-xs text-slate-700 leading-relaxed">
+                  {prToPrint.remark || "-"}
+                </p>
+              </div>
+
+              <div className="mt-4 p-3 bg-slate-50 border border-slate-200 rounded-sm text-[10px] text-slate-500 leading-relaxed">
+                <p className="font-bold text-slate-700 mb-1">
+                  ระเบียบและข้อตกลงในการขออนุมัติสั่งซื้อ (Terms & Conditions):
+                </p>
+                <ul className="list-disc pl-4 space-y-0.5">
+                  <li>
+                    การขอสั่งซื้อสินค้าที่มีมูลค่าเกิน 10,000 บาท
+                    ผู้ขอเบิกจะต้องแนบใบเสนอราคา (Quotation) อย่างน้อย 2
+                    ร้านค้าเพื่อเปรียบเทียบ
+                  </li>
+                  <li>
+                    เอกสารฉบับนี้จะสมบูรณ์ก็ต่อเมื่อมีการลงนามจากผู้มีอำนาจอนุมัติครบถ้วนตามระเบียบของบริษัท
+                  </li>
+                  <li>
+                    ฝ่ายจัดซื้อจะใช้เวลาดำเนินการสั่งซื้อภายใน 3-5 วันทำการ
+                    หลังจากเอกสารได้รับการอนุมัติ
+                  </li>
+                </ul>
+              </div>
               {/* 4. ส่วนลงนาม (Signatures) */}
-              <div className="grid grid-cols-3 gap-6 mt-16 text-xs text-center">
+              <div className="grid grid-cols-3 gap-6 mt-auto text-xs text-center">
                 <div>
                   <div className="border-b border-slate-800 w-40 mx-auto mb-2 h-10"></div>
                   <p className="font-bold text-slate-800">
