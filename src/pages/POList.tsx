@@ -11,19 +11,22 @@ import {
   ChevronRight,
   XCircle,
   AlertTriangle,
+  PackageOpen,
+  Clock,
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import api from "../services/api";
 import toast from "react-hot-toast";
 import { useDebounce } from "../hook/useDebounce";
 import AuditTimeline from "../components/AduitTimeline";
+import ExcelJS from "exceljs";
+import { saveAs } from "file-saver";
 
-// 🌟 1. ดึง Type จากไฟล์ศูนย์รวมของเรา
+// ดึง Type จากไฟล์ศูนย์รวมของเรา
 import type { POHeaderData, POItem, Vendor } from "../types";
 import { useAuth } from "../hook/useAuth";
 
 export default function POListPage() {
-  // 🌟 2. ใช้ Hook แทน localStorage
   const { userRole } = useAuth();
 
   const [poList, setPoList] = useState<POHeaderData[]>([]);
@@ -60,7 +63,7 @@ export default function POListPage() {
       toast.success(`ยกเลิกใบสั่งซื้อ ${poToCancel} สำเร็จ`);
       setIsCancelModalOpen(false);
       setCancelReason("");
-      setRefreshTrigger((prev) => prev + 1); // สั่งโหลดใหม่
+      setRefreshTrigger((prev) => prev + 1);
     } catch {
       toast.error("ไม่สามารถยกเลิกใบสั่งซื้อได้");
     }
@@ -121,25 +124,25 @@ export default function POListPage() {
     switch (status) {
       case "Issued":
         return (
-          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-blue-50 border border-blue-200 text-blue-700 shadow-sm text-xs font-bold uppercase">
+          <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-50 border border-blue-200 text-blue-700 shadow-sm text-xs font-bold uppercase tracking-wider">
             {status}
           </div>
         );
       case "Goods Received":
         return (
-          <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 shadow-sm text-xs font-bold uppercase">
+          <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 shadow-sm text-xs font-bold uppercase tracking-wider">
             {status}
           </div>
         );
       case "Cancelled":
         return (
-          <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-rose-50 border border-rose-200 text-rose-700 shadow-sm text-xs font-bold uppercase">
+          <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 shadow-sm text-xs font-bold uppercase tracking-wider">
             {status}
           </div>
         );
       default:
         return (
-          <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-50 border border-slate-200 text-slate-700 shadow-sm text-xs font-bold uppercase">
+          <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-700 shadow-sm text-xs font-bold uppercase tracking-wider">
             {status}
           </div>
         );
@@ -161,13 +164,126 @@ export default function POListPage() {
     }
   };
 
+  const handleExportExcel = async () => {
+    // 1. สร้าง Workbook และ Worksheet
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet("PO Report");
+
+    // 2. กำหนดความกว้างคอลัมน์
+    worksheet.columns = [
+      { width: 18 }, // A: เลขที่ PO
+      { width: 18 }, // B: วันที่สั่งซื้อ
+      { width: 45 }, // C: บริษัทผู้ขาย
+      { width: 25 }, // D: ยอดรวมสุทธิ
+      { width: 20 }, // E: สถานะ
+    ];
+
+    // 3. ใส่หัวกระดาษ (Company Header)
+    worksheet.mergeCells("A1:E1");
+    const titleCell = worksheet.getCell("A1");
+    titleCell.value = "รายงานสรุปรายการใบสั่งซื้อ (Purchase Order Report)";
+    titleCell.font = { size: 16, bold: true };
+    titleCell.alignment = { vertical: "middle", horizontal: "center" };
+
+    worksheet.mergeCells("A2:E2");
+    const dateCell = worksheet.getCell("A2");
+    dateCell.value = `วันที่พิมพ์รายงาน: ${new Date().toLocaleDateString("th-TH")}`;
+    dateCell.font = { size: 10, italic: true };
+    dateCell.alignment = { vertical: "middle", horizontal: "center" };
+
+    worksheet.addRow([]); // เว้นบรรทัด
+
+    // 4. สร้างหัวตาราง (Table Header)
+    const headerRow = worksheet.addRow([
+      "เลขที่ PO",
+      "วันที่สั่งซื้อ",
+      "บริษัทผู้ขาย",
+      "ยอดรวมสุทธิ (บาท)",
+      "สถานะ",
+    ]);
+    headerRow.eachCell((cell) => {
+      cell.fill = {
+        type: "pattern",
+        pattern: "solid",
+        fgColor: { argb: "FF1E293B" }, // พื้นหลังสี Slate-800
+      };
+      cell.font = { color: { argb: "FFFFFFFF" }, bold: true }; // ตัวหนังสือสีขาว
+      cell.alignment = { vertical: "middle", horizontal: "center" };
+      cell.border = {
+        top: { style: "thin" },
+        left: { style: "thin" },
+        bottom: { style: "thin" },
+        right: { style: "thin" },
+      };
+    });
+
+    // 5. ใส่ข้อมูลจากตาราง (Data Rows)
+    let totalSum = 0;
+    filteredList.forEach((po) => {
+      totalSum += Number(po.total_amount);
+      const row = worksheet.addRow([
+        po.po_no,
+        new Date(po.po_date).toLocaleDateString("th-TH"),
+        getVendorName(po.vendor_id),
+        Number(po.total_amount),
+        po.status,
+      ]);
+
+      // จัด Format แต่ละเซลล์
+      row.getCell(1).alignment = { horizontal: "center" }; // เลขที่ PO
+      row.getCell(2).alignment = { horizontal: "center" }; // วันที่
+      row.getCell(4).numFmt = "#,##0.00"; // ยอดเงิน: ใส่ลูกน้ำและทศนิยม 2 ตำแหน่ง
+      row.getCell(5).alignment = { horizontal: "center" }; // สถานะ
+
+      // ตีเส้นขอบทุกเซลล์
+      row.eachCell((cell) => {
+        cell.border = {
+          top: { style: "thin" },
+          left: { style: "thin" },
+          bottom: { style: "thin" },
+          right: { style: "thin" },
+        };
+      });
+    });
+
+    // 6. สรุปยอดรวมด้านล่าง (Summary Row)
+    const summaryRow = worksheet.addRow([
+      "",
+      "",
+      "รวมยอดสั่งซื้อสุทธิ",
+      totalSum,
+      "",
+    ]);
+    summaryRow.getCell(3).font = { bold: true };
+    summaryRow.getCell(3).alignment = { horizontal: "right" };
+    summaryRow.getCell(4).font = { bold: true, color: { argb: "FFDC2626" } }; // ยอดรวมสีแดง
+    summaryRow.getCell(4).numFmt = "#,##0.00";
+
+    // ตีเส้นคู่ (Double border) ปิดท้าย
+    summaryRow.eachCell((cell, colNumber) => {
+      if (colNumber === 3 || colNumber === 4) {
+        cell.border = {
+          top: { style: "double" },
+          bottom: { style: "double" },
+        };
+      }
+    });
+
+    // 7. แปลงไฟล์และดาวน์โหลด
+    const buffer = await workbook.xlsx.writeBuffer();
+    const blob = new Blob([buffer], {
+      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    });
+    saveAs(blob, `PO_Report_${new Date().getTime()}.xlsx`);
+  };
+
   return (
-    <div className="min-h-screen bg-slate-50 p-6">
-      <div className="max-w-7xl mx-auto space-y-6">
+    <div className="min-h-screen bg-slate-50/50 p-6">
+      <div className="max-w-7xl mx-auto space-y-6 animate-in fade-in duration-500">
         {/* Header Section */}
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
+            <h1 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
               <ShoppingCart className="text-blue-600" /> รายการใบสั่งซื้อ (PO)
             </h1>
             <p className="text-slate-500 text-sm mt-1">
@@ -177,14 +293,14 @@ export default function POListPage() {
 
           <div className="flex items-center gap-3">
             <button
-              className="bg-white border border-slate-300 text-slate-400 px-4 py-2 rounded-lg font-medium flex items-center gap-2 cursor-not-allowed opacity-60 shadow-sm text-sm"
-              title="ฟีเจอร์นี้จะเปิดใช้งานในอนาคต"
+              onClick={handleExportExcel}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 rounded-xl font-bold flex items-center gap-2 shadow-sm hover:shadow-md transition-all active:scale-95 text-sm"
             >
               <FileSpreadsheet size={18} /> Export Excel
             </button>
             <Link
               to="/po/create"
-              className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-lg font-medium flex items-center gap-2 shadow-sm transition text-sm"
+              className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl font-bold flex items-center gap-2 shadow-sm hover:shadow-md transition-all active:scale-95 text-sm"
             >
               <Plus size={18} /> สร้างใบสั่งซื้อ
             </Link>
@@ -192,10 +308,10 @@ export default function POListPage() {
         </div>
 
         {/* Filters Bar */}
-        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col md:flex-row gap-4 items-center justify-between">
+        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-col md:flex-row gap-4 items-center justify-between hover:shadow-md transition-shadow duration-300">
           <div className="relative flex-1 w-full max-w-md">
             <Search
-              className="absolute left-3 top-2.5 text-slate-400"
+              className="absolute left-3.5 top-3 text-slate-400"
               size={18}
             />
             <input
@@ -206,14 +322,14 @@ export default function POListPage() {
                 setSearchTerm(e.target.value);
                 setCurrentPage(1);
               }}
-              className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-100 transition-shadow text-sm"
+              className="w-full pl-11 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-sm font-medium"
             />
           </div>
 
           <div className="flex items-center gap-3 w-full md:w-auto">
-            <div className="flex items-center gap-2 text-slate-500 bg-slate-50 px-3 py-2 rounded-lg border border-slate-200">
+            <div className="flex items-center gap-2 text-slate-500 bg-slate-50 px-4 py-2.5 rounded-xl border border-slate-200">
               <Filter size={16} />
-              <span className="text-sm font-medium">สถานะ:</span>
+              <span className="text-sm font-bold">สถานะ:</span>
             </div>
             <select
               value={statusFilter}
@@ -221,63 +337,72 @@ export default function POListPage() {
                 setStatusFilter(e.target.value);
                 setCurrentPage(1);
               }}
-              className="px-4 py-2 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-100 min-w-[150px]"
+              className="px-4 py-2.5 border border-slate-200 rounded-xl text-sm font-medium bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all min-w-[180px] cursor-pointer"
             >
               <option value="All">ทั้งหมด (All)</option>
               <option value="Issued">Issued (รอรับของ)</option>
-              <option value="Goods Received">
-                Goods Received (คลังรับของแล้ว)
-              </option>
-              <option value="Cancelled">Cancelled (ยกเลิกคำสั่งซื้อ)</option>
+              <option value="Goods Received">Goods Received</option>
+              <option value="Cancelled">Cancelled</option>
             </select>
           </div>
         </div>
 
         {/* Main Table */}
-        <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden hover:shadow-md transition-shadow duration-300">
           <div className="overflow-x-auto">
             <table className="w-full text-left">
-              <thead className="bg-slate-50 border-b border-slate-200 text-xs uppercase tracking-wide text-slate-500">
+              <thead className="bg-slate-50/80 border-b border-slate-200 text-xs uppercase tracking-wider text-slate-500">
                 <tr>
-                  <th className="p-4 font-semibold">เลขที่ PO</th>
-                  <th className="p-4 font-semibold">วันที่สั่งซื้อ</th>
-                  <th className="p-4 font-semibold">อ้างอิง PR</th>
-                  <th className="p-4 font-semibold">บริษัทผู้ขาย</th>
-                  <th className="p-4 font-semibold text-right">ยอดรวมสุทธิ</th>
-                  <th className="p-4 font-semibold text-center">สถานะ</th>
-                  <th className="p-4 font-semibold text-center">จัดการ</th>
+                  <th className="p-5 pl-6 font-bold">เลขที่ PO</th>
+                  <th className="p-5 font-bold">วันที่สั่งซื้อ</th>
+                  <th className="p-5 font-bold">อ้างอิง PR</th>
+                  <th className="p-5 font-bold">บริษัทผู้ขาย</th>
+                  <th className="p-5 font-bold text-right">ยอดรวมสุทธิ</th>
+                  <th className="p-5 font-bold text-center">สถานะ</th>
+                  <th className="p-5 font-bold text-center">จัดการ</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-sm">
                 {isLoading ? (
                   <tr>
-                    <td colSpan={7} className="p-8 text-center text-slate-400">
-                      กำลังโหลดข้อมูล...
+                    <td colSpan={7} className="p-12 text-center">
+                      <div className="flex flex-col items-center gap-3 text-slate-400">
+                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                        <p className="font-medium">กำลังโหลดข้อมูล...</p>
+                      </div>
                     </td>
                   </tr>
                 ) : currentItems.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="p-12 text-center text-slate-400">
-                      <FileText size={32} className="mx-auto mb-3 opacity-20" />
-                      ไม่พบรายการใบสั่งซื้อในระบบ
+                    <td colSpan={7} className="p-16 text-center text-slate-400">
+                      <div className="flex flex-col items-center gap-3">
+                        <div className="p-4 bg-slate-50 rounded-full">
+                          <PackageOpen size={40} className="text-slate-300" />
+                        </div>
+                        <p className="font-medium text-slate-500 text-base">
+                          ไม่พบรายการใบสั่งซื้อในระบบ
+                        </p>
+                      </div>
                     </td>
                   </tr>
                 ) : (
                   currentItems.map((po, index) => (
                     <tr
                       key={index}
-                      className="hover:bg-slate-50 transition-colors group"
+                      className="hover:bg-slate-50/80 transition-colors group"
                     >
-                      <td className="p-4 font-bold text-blue-600">
+                      <td className="p-5 pl-6 font-bold text-blue-600">
                         {po.po_no}
                       </td>
-                      <td className="p-4 text-slate-600">
+                      <td className="p-5 text-slate-600 font-medium">
                         {new Date(po.po_date).toLocaleDateString("th-TH")}
                       </td>
-                      <td className="p-4 text-slate-600">{po.pr_no}</td>
-                      <td className="p-4">
+                      <td className="p-5 text-slate-600 font-medium">
+                        {po.pr_no}
+                      </td>
+                      <td className="p-5">
                         <div className="flex flex-col">
-                          <span className="font-medium text-slate-700">
+                          <span className="font-bold text-slate-700">
                             {getVendorName(po.vendor_id)}
                           </span>
                           <span className="text-xs text-slate-400 mt-0.5">
@@ -285,20 +410,23 @@ export default function POListPage() {
                           </span>
                         </div>
                       </td>
-                      <td className="p-4 text-right font-bold text-slate-800">
-                        {Number(po.total_amount).toLocaleString()} บาท
+                      <td className="p-5 text-right font-black text-slate-800">
+                        {Number(po.total_amount).toLocaleString()}{" "}
+                        <span className="text-xs text-slate-400 font-medium ml-1">
+                          บาท
+                        </span>
                       </td>
-                      <td className="p-4 text-center">
+                      <td className="p-5 text-center">
                         {renderStatusBadge(po.status)}
                       </td>
-                      <td className="p-4 text-center">
-                        <div className="flex items-center justify-center gap-1">
+                      <td className="p-5 text-center">
+                        <div className="flex items-center justify-center gap-2">
                           <button
                             onClick={() => handleViewDetails(po.po_no)}
-                            className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                            className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all active:scale-95"
                             title="ดูรายละเอียด"
                           >
-                            <Eye size={18} />
+                            <Eye size={20} />
                           </button>
 
                           {po.status === "Issued" &&
@@ -306,10 +434,10 @@ export default function POListPage() {
                               userRole === "Purchaser") && (
                               <button
                                 onClick={() => handleOpenCancelModal(po.po_no)}
-                                className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
+                                className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all active:scale-95"
                                 title="ยกเลิกคำสั่งซื้อ"
                               >
-                                <XCircle size={18} />
+                                <XCircle size={20} />
                               </button>
                             )}
                         </div>
@@ -323,15 +451,25 @@ export default function POListPage() {
 
           {/* Pagination Controls */}
           {filteredList.length > 0 && (
-            <div className="flex flex-col sm:flex-row items-center justify-between p-4 px-6 border-t border-slate-200 bg-slate-50 gap-4">
+            <div className="flex flex-col sm:flex-row items-center justify-between p-5 border-t border-slate-200 bg-slate-50/50 gap-4">
               <div className="text-sm font-medium text-slate-500">
-                แสดง {startIndex + 1} ถึง{" "}
-                {Math.min(startIndex + itemsPerPage, filteredList.length)}{" "}
-                จากทั้งหมด {filteredList.length} รายการ
+                แสดง{" "}
+                <span className="font-bold text-slate-700">
+                  {startIndex + 1}
+                </span>{" "}
+                ถึง{" "}
+                <span className="font-bold text-slate-700">
+                  {Math.min(startIndex + itemsPerPage, filteredList.length)}
+                </span>{" "}
+                จากทั้งหมด{" "}
+                <span className="font-bold text-slate-700">
+                  {filteredList.length}
+                </span>{" "}
+                รายการ
               </div>
 
               <div className="flex items-center gap-4">
-                <p className="text-sm font-medium text-slate-600">
+                <p className="text-sm font-bold text-slate-600">
                   หน้า {currentPage} จาก {totalPages}
                 </p>
                 <div className="flex gap-2">
@@ -340,18 +478,18 @@ export default function POListPage() {
                       setCurrentPage((prev) => Math.max(prev - 1, 1))
                     }
                     disabled={currentPage === 1}
-                    className="p-2 border border-slate-300 rounded-lg bg-white hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    className="p-2 border border-slate-200 rounded-xl bg-white hover:bg-slate-50 hover:border-slate-300 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm active:scale-95"
                   >
-                    <ChevronLeft size={16} />
+                    <ChevronLeft size={18} className="text-slate-600" />
                   </button>
                   <button
                     onClick={() =>
                       setCurrentPage((prev) => Math.min(prev + 1, totalPages))
                     }
                     disabled={currentPage === totalPages}
-                    className="p-2 border border-slate-300 rounded-lg bg-white hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    className="p-2 border border-slate-200 rounded-xl bg-white hover:bg-slate-50 hover:border-slate-300 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm active:scale-95"
                   >
-                    <ChevronRight size={16} />
+                    <ChevronRight size={18} className="text-slate-600" />
                   </button>
                 </div>
               </div>
@@ -362,7 +500,7 @@ export default function POListPage() {
         {/* 🌟 1. Modal ดูรายละเอียด (View Details) */}
         {isModalOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
-            <div className="bg-white rounded-3xl shadow-2xl w-full max-w-4xl overflow-hidden flex flex-col max-h-[85vh] animate-in zoom-in-95 duration-200">
+            <div className="bg-white rounded-3xl shadow-2xl w-full max-w-4xl overflow-hidden flex flex-col max-h-[85vh] animate-in zoom-in-95 duration-200 border border-slate-200">
               <div className="px-6 py-5 border-b flex justify-between items-center bg-slate-800 text-white">
                 <h2 className="text-xl font-bold flex items-center gap-2">
                   <FileText className="text-blue-400" size={20} />
@@ -384,17 +522,17 @@ export default function POListPage() {
                   );
                   if (currentPO && currentPO.status === "Cancelled") {
                     return (
-                      <div className="m-6 p-4 bg-rose-50 border border-rose-200 rounded-xl shadow-sm flex items-start gap-4">
-                        <div className="p-2 bg-rose-100 rounded-full text-rose-600 mt-1">
+                      <div className="m-6 p-5 bg-rose-50 border border-rose-200 rounded-2xl shadow-sm flex items-start gap-4">
+                        <div className="p-2 bg-rose-100 rounded-full text-rose-600 mt-0.5">
                           <AlertTriangle size={24} />
                         </div>
                         <div>
-                          <h4 className="text-rose-800 font-bold text-base mb-1">
+                          <h4 className="text-rose-800 font-bold text-lg mb-1">
                             เอกสารนี้ถูกยกเลิกแล้ว
                           </h4>
-                          <div className="text-rose-700 text-sm space-y-1">
+                          <div className="text-rose-700 text-sm space-y-1.5 mt-2">
                             <p>
-                              <span className="font-semibold text-rose-900">
+                              <span className="font-bold text-rose-900 bg-rose-100 px-2 py-0.5 rounded mr-2">
                                 วันที่ยกเลิก:
                               </span>{" "}
                               {currentPO.cancelled_at
@@ -404,7 +542,7 @@ export default function POListPage() {
                                 : "ไม่ระบุเวลา"}
                             </p>
                             <p>
-                              <span className="font-semibold text-rose-900">
+                              <span className="font-bold text-rose-900 bg-rose-100 px-2 py-0.5 rounded mr-2">
                                 เหตุผล:
                               </span>{" "}
                               {currentPO.cancel_reason || "ไม่มีการระบุเหตุผล"}
@@ -418,7 +556,7 @@ export default function POListPage() {
                 })()}
 
                 <table className="w-full text-left border-collapse bg-white">
-                  <thead className="bg-slate-100/80 backdrop-blur-sm sticky top-0 shadow-sm text-xs uppercase tracking-wide text-slate-600 font-bold">
+                  <thead className="bg-slate-100/80 backdrop-blur-sm sticky top-0 shadow-sm text-xs uppercase tracking-wider text-slate-600 font-bold">
                     <tr>
                       <th className="p-4 pl-6 border-b">รหัสสินค้า</th>
                       <th className="p-4 border-b">รายละเอียด</th>
@@ -434,16 +572,21 @@ export default function POListPage() {
                       <tr>
                         <td
                           colSpan={5}
-                          className="py-12 text-center text-slate-400 animate-pulse"
+                          className="py-16 text-center text-slate-400"
                         >
-                          กำลังโหลดข้อมูลรายการสินค้า...
+                          <div className="flex flex-col items-center gap-3">
+                            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                            <p className="font-medium">
+                              กำลังโหลดข้อมูลรายการสินค้า...
+                            </p>
+                          </div>
                         </td>
                       </tr>
                     ) : poItems.length === 0 ? (
                       <tr>
                         <td
                           colSpan={5}
-                          className="py-12 text-center text-slate-400"
+                          className="py-16 text-center text-slate-400 font-medium"
                         >
                           ไม่พบรายการสินค้าในเอกสารนี้
                         </td>
@@ -454,19 +597,19 @@ export default function POListPage() {
                           key={idx}
                           className="hover:bg-slate-50 transition-colors"
                         >
-                          <td className="p-4 pl-6 text-slate-500 font-mono text-sm">
+                          <td className="p-4 pl-6 text-slate-500 font-mono text-sm font-medium">
                             {item.product_code}
                           </td>
-                          <td className="p-4 text-slate-800 font-medium">
+                          <td className="p-4 text-slate-800 font-bold">
                             {item.description || "-"}
                           </td>
-                          <td className="p-4 text-center font-bold text-slate-700 bg-slate-50/50">
+                          <td className="p-4 text-center font-black text-slate-700 bg-slate-50/50">
                             {Number(item.ordered_qty).toLocaleString()}
                           </td>
-                          <td className="p-4 text-right text-slate-600">
+                          <td className="p-4 text-right text-slate-600 font-medium">
                             {Number(item.unit_price).toLocaleString()}
                           </td>
-                          <td className="p-4 pr-6 text-right font-bold text-blue-700 bg-blue-50/30">
+                          <td className="p-4 pr-6 text-right font-black text-blue-700 bg-blue-50/30">
                             {Number(item.line_total).toLocaleString()}
                           </td>
                         </tr>
@@ -478,11 +621,11 @@ export default function POListPage() {
                       <tr>
                         <td
                           colSpan={4}
-                          className="p-4 text-right font-bold text-slate-500 uppercase text-xs tracking-wider"
+                          className="p-5 text-right font-bold text-slate-500 uppercase tracking-wider"
                         >
                           ยอดรวมสุทธิของเอกสารนี้
                         </td>
-                        <td className="p-4 pr-6 text-right font-bold text-red-600 text-lg">
+                        <td className="p-5 pr-6 text-right font-black text-rose-600 text-xl tracking-tight">
                           {poItems
                             .reduce(
                               (sum, item) => sum + Number(item.line_total),
@@ -496,17 +639,17 @@ export default function POListPage() {
                 </table>
               </div>
               <div className="p-6 border-t border-slate-200 bg-white">
-                <h3 className="font-bold text-slate-800 mb-4">
+                <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2">
+                  <Clock size={18} className="text-blue-500" />{" "}
                   ประวัติการดำเนินการ (Audit Timeline)
                 </h3>
                 <AuditTimeline tableName="po_header" recordId={selectedPONo} />
               </div>
 
-              {/* แถบ Action Bar ด้านล่าง */}
-              <div className="p-4 border-t border-slate-200 bg-white flex justify-end">
+              <div className="p-4 border-t border-slate-100 bg-slate-50 flex justify-end">
                 <button
                   onClick={() => setIsModalOpen(false)}
-                  className="px-6 py-2.5 text-sm font-bold text-slate-600 bg-white border border-slate-300 rounded-lg hover:bg-slate-100 hover:text-slate-800 active:scale-95 transition-all shadow-sm"
+                  className="px-6 py-2.5 text-sm font-bold text-slate-700 bg-white border border-slate-300 rounded-xl hover:bg-slate-100 hover:text-slate-900 active:scale-95 transition-all shadow-sm"
                 >
                   ปิดหน้าต่าง
                 </button>
@@ -517,25 +660,31 @@ export default function POListPage() {
 
         {/* 2. Modal ยกเลิกใบสั่งซื้อ (Cancel PO) */}
         {isCancelModalOpen && (
-          <div className="fixed inset-0 z-[60] bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4">
-            <div className="bg-white rounded-3xl shadow-xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+          <div className="fixed inset-0 z-[60] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in-95 duration-200 border border-slate-200">
               <div className="p-8">
-                <h2 className="text-xl font-bold text-slate-800 mb-2 flex items-center gap-2">
-                  <XCircle className="text-rose-600" /> ยกเลิกใบสั่งซื้อ
+                <div className="w-16 h-16 bg-rose-100 text-rose-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <XCircle size={32} />
+                </div>
+                <h2 className="text-2xl font-black text-slate-800 mb-2 text-center">
+                  ยกเลิกใบสั่งซื้อ
                 </h2>
-                <p className="text-slate-500 text-sm mb-6">
-                  คุณกำลังจะยกเลิกใบสั่งซื้อหมายเลข{" "}
-                  <span className="font-bold text-slate-700">{poToCancel}</span>
+                <p className="text-slate-500 text-center mb-8">
+                  คุณกำลังจะยกเลิกใบสั่งซื้อ <br />{" "}
+                  <span className="font-black text-lg text-slate-800">
+                    {poToCancel}
+                  </span>
                 </p>
 
                 <div className="mb-8">
-                  <label className="block text-xs font-bold text-slate-500 uppercase mb-2">
-                    เหตุผลที่ยกเลิก (บังคับกรอก) *
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
+                    เหตุผลที่ยกเลิก (บังคับกรอก){" "}
+                    <span className="text-rose-500">*</span>
                   </label>
                   <textarea
                     value={cancelReason}
                     onChange={(e) => setCancelReason(e.target.value)}
-                    className="w-full p-4 border border-slate-300 rounded-xl focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500 outline-none text-sm resize-none h-28 bg-slate-50 focus:bg-white transition-all"
+                    className="w-full p-4 border border-slate-300 rounded-2xl focus:ring-4 focus:ring-rose-500/20 focus:border-rose-500 outline-none text-sm font-medium resize-none h-32 bg-slate-50 focus:bg-white transition-all"
                     placeholder="เช่น Vendor แจ้งว่าสินค้าหมดสต๊อก หรือ จัดซื้อสั่งผิด..."
                   ></textarea>
                 </div>
@@ -543,14 +692,14 @@ export default function POListPage() {
                 <div className="flex gap-3 justify-end">
                   <button
                     onClick={() => setIsCancelModalOpen(false)}
-                    className="flex-1 px-5 py-3 rounded-xl font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors"
+                    className="flex-1 px-5 py-3 rounded-xl font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors active:scale-95"
                   >
-                    ปิดหน้าต่าง
+                    ยกเลิก
                   </button>
                   <button
                     onClick={executeCancelPO}
                     disabled={!cancelReason.trim()}
-                    className="flex-1 px-5 py-3 rounded-xl font-bold text-white bg-rose-600 hover:bg-rose-700 transition-all shadow-md hover:shadow-lg hover:shadow-rose-600/30 disabled:opacity-50 disabled:cursor-not-allowed active:scale-95"
+                    className="flex-1 px-5 py-3 rounded-xl font-bold text-white bg-rose-600 hover:bg-rose-700 transition-all shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed active:scale-95"
                   >
                     ยืนยันการยกเลิก
                   </button>
