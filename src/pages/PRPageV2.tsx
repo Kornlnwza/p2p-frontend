@@ -12,6 +12,7 @@ import {
 import { Link, useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
 import api from "../services/api";
+import { useAuth } from "../hook/useAuth";
 
 // กำหนด Type สำหรับรายการสินค้าใน PR
 interface PRItemInput {
@@ -25,9 +26,13 @@ export default function PRPageV2() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // 1. State ข้อมูลทั่วไป
-  const [department, setDepartment] = useState("");
+  const { department } = useAuth();
   const [requiredDate, setRequiredDate] = useState("");
   const [remark, setRemark] = useState("");
+
+  // pr type
+  const [prType, setPrType] = useState("Requirement");
+  const [otherType, setOtherType] = useState("");
 
   // 2. State รายการสินค้า (เริ่มต้นมี 1 แถวว่างๆ)
   const [items, setItems] = useState<PRItemInput[]>([
@@ -35,8 +40,9 @@ export default function PRPageV2() {
   ]);
 
   // 3. State ไฟล์แนบ (ใบเสนอราคา)
-  const [attachment, setAttachment] = useState<File | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const [file, setFile] = useState<File | null>(null);
 
   // --- ฟังก์ชันจัดการรายการสินค้า (Items) ---
   const handleAddItem = () => {
@@ -63,19 +69,28 @@ export default function PRPageV2() {
 
   // --- ฟังก์ชันจัดการไฟล์แนบ ---
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files.length > 0) {
-      const file = e.target.files[0];
-      // เช็กขนาดไฟล์ไม่เกิน 5MB
-      if (file.size > 5 * 1024 * 1024) {
-        toast.error("ขนาดไฟล์ต้องไม่เกิน 5MB");
-        return;
-      }
-      setAttachment(file);
+    const selectedFile = e.target.files?.[0]; // ใช้ optional chaining ให้กระชับ
+
+    if (!selectedFile) return;
+
+    if (selectedFile.size > 5 * 1024 * 1024) {
+      toast.error("ขนาดไฟล์ต้องไม่เกิน 5MB");
+      e.target.value = ""; // เคลียร์ค่า input ให้เลือกใหม่ได้
+      return;
     }
+
+    const allowedTypes = ["application/pdf", "image/jpeg", "image/png"];
+    if (!allowedTypes.includes(selectedFile.type)) {
+      toast.error("รองรับเฉพาะไฟล์ PDF, JPG และ PNG เท่านั้น");
+      e.target.value = "";
+      return;
+    }
+
+    setFile(selectedFile);
   };
 
   const clearFile = () => {
-    setAttachment(null);
+    setFile(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
@@ -103,12 +118,13 @@ export default function PRPageV2() {
       formData.append("required_date", requiredDate);
       formData.append("remark", remark);
 
+      formData.append("pr_type", prType);
+
       // ส่ง items ไปในรูปแบบ JSON String
       formData.append("items", JSON.stringify(items));
 
-      // ถ้ามีการแนบไฟล์ ให้แนบไปด้วย
-      if (attachment) {
-        formData.append("file", attachment); // Backend ต้องใช้ multer มารับ "file" นี้
+      if (file) {
+        formData.append("file", file); // 🌟 ตรงนี้คือคีย์หลักที่ Backend รอรับอยู่
       }
 
       // ยิง API (สมมติว่าเป็น Endpoint: POST /pr)
@@ -167,19 +183,17 @@ export default function PRPageV2() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
                 <label className="block text-sm font-bold text-slate-700 mb-2">
-                  แผนกที่ขอเบิกงบ <span className="text-rose-500">*</span>
+                  แผนกที่ขอเบิก (Department)
                 </label>
-                <select
-                  value={department}
-                  onChange={(e) => setDepartment(e.target.value)}
-                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all"
-                >
-                  <option value="">-- เลือกแผนก --</option>
-                  <option value="IT">IT (เทคโนโลยีสารสนเทศ)</option>
-                  <option value="HR">HR (ทรัพยากรบุคคล)</option>
-                  <option value="Marketing">Marketing (การตลาด)</option>
-                  <option value="Operation">Operation (ปฏิบัติการ)</option>
-                </select>
+                <input
+                  type="text"
+                  value={department} // 🌟 2. จุดนี้สำคัญมาก! ต้องเอาตัวแปรมาใส่ใน value
+                  readOnly
+                  className="w-full p-2.5 bg-slate-100 border border-slate-200 rounded-xl text-slate-500 font-medium cursor-not-allowed focus:outline-none"
+                />
+                <p className="text-[10px] text-slate-400 mt-1">
+                  * ดึงข้อมูลแผนกอัตโนมัติจากโปรไฟล์ของคุณ
+                </p>
               </div>
               <div>
                 <label className="block text-sm font-bold text-slate-700 mb-2">
@@ -195,6 +209,49 @@ export default function PRPageV2() {
               </div>
             </div>
 
+            <div className="grid grid-cols-2 gap-4">
+              {[
+                "เสนอซื้อ / Requirement",
+                "สินค้าตัวอย่าง / Sample or test",
+                "เสนอซ่อม / Maintenance",
+                "เพื่อสำรอง / Spare",
+                "จัดจ้างผู้รับเหมา / Contractor",
+              ].map((type) => (
+                <label
+                  key={type}
+                  className="flex items-center space-x-2 border p-3 rounded-lg cursor-pointer"
+                >
+                  <input
+                    type="radio"
+                    name="prType"
+                    value={type}
+                    checked={prType === type}
+                    onChange={(e) => setPrType(e.target.value)}
+                  />
+                  <span>{type}</span>
+                </label>
+              ))}
+              <label className="flex items-center space-x-2 border p-3 rounded-lg cursor-pointer">
+                <input
+                  type="radio"
+                  name="prType"
+                  value="อื่นๆ / Other"
+                  checked={prType === "อื่นๆ / Other"}
+                  onChange={() => setPrType("อื่นๆ / Other")}
+                />
+                <span>อื่นๆ / Other</span>
+              </label>
+            </div>
+
+            {prType === "อื่นๆ / Other" && (
+              <input
+                type="text"
+                value={otherType} // 🌟 นำตัวแปรมาผูกกับ value
+                onChange={(e) => setOtherType(e.target.value)} // 🌟 นำฟังก์ชันมาผูก
+                placeholder="โปรดระบุรายละเอียด..."
+                className="border p-2 rounded"
+              />
+            )}
             <div>
               <label className="block text-sm font-bold text-slate-700 mb-2">
                 เหตุผลความจำเป็นในการสั่งซื้อ{" "}
@@ -332,7 +389,7 @@ export default function PRPageV2() {
             </div>
 
             <div
-              className={`border-2 border-dashed rounded-xl p-8 text-center transition-all ${attachment ? "border-blue-500 bg-blue-50/50" : "border-slate-300 hover:border-blue-400 bg-slate-50"}`}
+              className={`border-2 border-dashed rounded-xl p-8 text-center transition-all ${file ? "border-blue-500 bg-blue-50/50" : "border-slate-300 hover:border-blue-400 bg-slate-50"}`}
             >
               <input
                 type="file"
@@ -342,7 +399,7 @@ export default function PRPageV2() {
                 className="hidden"
               />
 
-              {!attachment ? (
+              {!file ? (
                 <div className="flex flex-col items-center gap-3">
                   <div className="p-3 bg-white rounded-full shadow-sm text-blue-500 mb-2">
                     <UploadCloud size={28} />
@@ -367,10 +424,10 @@ export default function PRPageV2() {
                     <FileText className="text-blue-500 shrink-0" size={24} />
                     <div className="text-left overflow-hidden">
                       <p className="text-sm font-bold text-slate-800 truncate">
-                        {attachment.name}
+                        {file.name}
                       </p>
                       <p className="text-xs text-slate-500">
-                        {(attachment.size / 1024 / 1024).toFixed(2)} MB
+                        {(file.size / 1024 / 1024).toFixed(2)} MB
                       </p>
                     </div>
                   </div>

@@ -37,6 +37,8 @@ interface PRData {
   attachment_url?: string;
   status: string;
   remark?: string;
+  pr_type?: string;
+  requester_name?: string;
   items?: PRItem[];
 }
 
@@ -62,6 +64,7 @@ export default function PRListPage() {
   // State สำหรับ Print
   const printRef = useRef<HTMLDivElement>(null);
   const [prToPrint, setPrToPrint] = useState<PRData | null>(null);
+  const [currentPrintTime, setCurrentPrintTime] = useState("");
 
   const fetchPRs = async () => {
     setIsLoading(true);
@@ -115,6 +118,7 @@ export default function PRListPage() {
     try {
       const response = await api.get(`/pr/${pr.pr_no}`);
       setPrToPrint({ ...pr, items: response.data });
+      setCurrentPrintTime(new Date().toLocaleString("th-TH"));
       setTimeout(() => {
         handlePrintTrigger();
       }, 500);
@@ -655,105 +659,77 @@ export default function PRListPage() {
       )}
 
       {/* ============================================================ */}
-      {/* 🖨️ กระดาษ A4 สำหรับปริ้นต์ (ซ่อนไว้เสมอ) */}
+      {/* 🖨️ กระดาษ A4 สำหรับปริ้นต์ (แบบฟอร์มมาตรฐานองค์กร) */}
       {/* ============================================================ */}
       <div style={{ display: "none" }}>
         <div
           ref={printRef}
-          className="p-10 bg-white text-black font-sans w-[210mm] min-h-[297mm] mx-auto text-sm relative flex flex-col"
+          className="p-8 bg-white text-black font-sans w-[210mm] min-h-[297mm] mx-auto text-sm relative flex flex-col"
+          style={{ WebkitPrintColorAdjust: "exact", printColorAdjust: "exact" }}
         >
           {prToPrint && (
             <>
               {/* 1. ส่วนหัวกระดาษ (Header) */}
-              <div className="flex justify-between items-start pb-4 mb-6 border-b-2 border-slate-800">
+              <div className="flex justify-between items-start pb-2 mb-3 border-b-2 border-slate-900">
                 <div className="flex gap-4 items-center">
-                  {/* กล่องใส่โลโก้บริษัท (เปลี่ยนเป็นแท็ก <img src="..." /> ได้) */}
-                  <div className="w-16 h-16 bg-slate-100 border border-slate-300 flex items-center justify-center text-xs text-slate-400 font-bold tracking-widest rounded-md">
+                  <div className="w-16 h-16 bg-slate-100 border border-slate-300 flex items-center justify-center font-bold text-xs text-slate-400 tracking-widest rounded-sm">
                     LOGO
                   </div>
                   <div>
                     <h1 className="text-xl font-bold uppercase tracking-wide text-slate-900">
                       บริษัท ตัวอย่าง จำกัด (มหาชน)
                     </h1>
-                    <p className="text-xs text-slate-600 mt-0.5">
+                    <p className="text-[10px] text-slate-700 mt-0.5">
                       123 ถนนตัวอย่าง แขวงตัวอย่าง เขตตัวอย่าง กรุงเทพมหานคร
                       10000
                     </p>
-                    <p className="text-xs text-slate-600">
-                      โทร: 02-XXX-XXXX | เลขประจำตัวผู้เสียภาษี: 010XXXXXXXXXX
+                    <p className="text-[10px] text-slate-700">
+                      TAX ID: 010XXXXXXXXXX | Tel: 02-XXX-XXXX
                     </p>
                   </div>
                 </div>
-                <div className="text-right">
-                  <h2 className="text-2xl font-black uppercase text-slate-900 tracking-wider">
+
+                {/* มุมขวาบน (Title + Mini Table) */}
+                <div className="text-right flex flex-col items-end">
+                  <h2 className="text-xl font-black uppercase text-slate-900 tracking-widest">
                     Purchase Requisition
                   </h2>
-                  <h3 className="text-lg font-bold text-slate-600">
+                  <h3 className="text-xs font-bold text-slate-600 mb-2">
                     ใบขออนุมัติสั่งซื้อ
                   </h3>
-                </div>
-              </div>
 
-              {/* 2. ข้อมูลเอกสาร (Document Info) */}
-              <div className="grid grid-cols-2 gap-6 mb-6">
-                {/* ข้อมูลผู้ขอ */}
-                <div className="border border-slate-800 rounded-sm p-3">
-                  <table className="w-full text-xs">
+                  {/* ตารางเล็กสำหรับเลขที่เอกสาร */}
+                  <table className="text-[10px] border-collapse border border-slate-800 text-left w-48 shadow-sm">
                     <tbody>
                       <tr>
-                        <td className="font-bold w-28 pb-1.5 text-slate-700">
-                          แผนกที่ขอเบิก:
+                        <td className="border border-slate-800 bg-slate-100 p-1 font-bold w-20">
+                          PR No.
                         </td>
-                        <td className="pb-1.5 font-medium">
-                          {prToPrint.department}
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-
-                {/* ข้อมูลเอกสาร */}
-                <div className="border border-slate-800 rounded-sm p-3">
-                  <table className="w-full text-xs">
-                    <tbody>
-                      <tr>
-                        <td className="font-bold w-28 pb-1.5 text-slate-700">
-                          เลขที่เอกสาร (PR No):
-                        </td>
-                        <td className="pb-1.5 font-bold text-base">
+                        <td className="border border-slate-800 p-1 font-bold text-slate-900 text-center">
                           {prToPrint.pr_no}
                         </td>
                       </tr>
                       <tr>
-                        <td className="font-bold pb-1.5 text-slate-700">
-                          วันที่ขอซื้อ (Date):
+                        <td className="border border-slate-800 bg-slate-100 p-1 font-bold">
+                          Date
                         </td>
-                        <td className="pb-1.5">
+                        <td className="border border-slate-800 p-1 text-center">
                           {prToPrint.created_at
                             ? new Date(prToPrint.created_at).toLocaleDateString(
                                 "th-TH",
-                                {
-                                  year: "numeric",
-                                  month: "long",
-                                  day: "numeric",
-                                },
                               )
-                            : "ไม่ระบุ"}
+                            : "-"}
                         </td>
                       </tr>
                       <tr>
-                        <td className="font-bold pb-1.5 text-slate-700">
-                          วันที่ต้องการใช้:
+                        <td className="border border-slate-800 bg-slate-100 p-1 font-bold">
+                          Required Date
                         </td>
-                        <td className="pb-1.5 font-medium text-rose-600">
+                        <td className="border border-slate-800 p-1 text-center text-rose-600 font-bold">
                           {prToPrint.required_date
                             ? new Date(
                                 prToPrint.required_date,
-                              ).toLocaleDateString("th-TH", {
-                                year: "numeric",
-                                month: "long",
-                                day: "numeric",
-                              })
+                              ).toLocaleDateString("th-TH")
                             : "-"}
                         </td>
                       </tr>
@@ -762,64 +738,104 @@ export default function PRListPage() {
                 </div>
               </div>
 
-              {/* 3. ตารางรายการสินค้า (Item Table) */}
-              <table className="w-full text-xs border-collapse border border-slate-800 mb-8">
-                <thead className="bg-slate-100">
+              {/* 2. ข้อมูลผู้ขอเบิก และ PR Type (Checkboxes) */}
+              <div className="border border-slate-800 mb-3 text-xs flex flex-col">
+                <div className="flex border-b border-slate-800 bg-slate-50">
+                  <div className="flex-1 p-2 border-r border-slate-800 flex items-center gap-2">
+                    <span className="font-bold">ผู้ขอเบิก (Requester):</span>
+                    {/* 🌟 เปลี่ยนตรงนี้ครับ 🌟 */}
+                    <span className="font-medium">
+                      {prToPrint.requester_name || "ไม่ระบุ"}
+                    </span>
+                  </div>
+                  <div className="flex-1 p-2 flex items-center gap-2">
+                    <span className="font-bold">แผนก (Department):</span>
+                    <span className="font-medium uppercase">
+                      {prToPrint.department}
+                    </span>
+                  </div>
+                </div>
+                <div className="p-2.5 flex items-start gap-4">
+                  <span className="font-bold mt-0.5">ประเภท (PR Type):</span>
+                  <div className="flex gap-x-4 gap-y-2 flex-wrap">
+                    {[
+                      "Requirement",
+                      "Sample or test",
+                      "Maintenance",
+                      "Spare",
+                      "Contractor",
+                      "Other",
+                    ].map((type) => (
+                      <div key={type} className="flex items-center gap-1.5">
+                        <div className="w-3 h-3 border border-slate-800 flex items-center justify-center bg-white shadow-sm">
+                          {/* ถ้า pr_type ใน DB ตรงกับชื่อนี้ ให้แสดงเครื่องหมายถูก */}
+                          {prToPrint.pr_type === type && (
+                            <span className="text-[10px] font-black leading-none">
+                              ✓
+                            </span>
+                          )}
+                        </div>
+                        <span className="text-[10px] text-slate-700">
+                          {type}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* 3. ตารางรายการสินค้า (Item Table) - เพิ่มคอลัมน์ Unit และ Remark */}
+              <table className="w-full text-[10px] border-collapse border border-slate-800 mb-3">
+                <thead className="bg-slate-200">
                   <tr>
-                    <th className="border border-slate-800 p-2 text-center w-12 font-bold">
-                      ลำดับ
-                      <br />
-                      <span className="text-[10px] font-normal">No.</span>
+                    <th className="border border-slate-800 p-1.5 text-center w-8 font-bold">
+                      No.
                     </th>
-                    <th className="border border-slate-800 p-2 text-center font-bold">
-                      รายละเอียดสินค้า
-                      <br />
-                      <span className="text-[10px] font-normal">
-                        Description
-                      </span>
+                    <th className="border border-slate-800 p-1.5 text-center font-bold">
+                      Description
                     </th>
-                    <th className="border border-slate-800 p-2 text-center w-20 font-bold">
-                      จำนวน
-                      <br />
-                      <span className="text-[10px] font-normal">Q'TY</span>
+                    <th className="border border-slate-800 p-1.5 text-center w-12 font-bold">
+                      Q'TY
                     </th>
-                    <th className="border border-slate-800 p-2 text-center w-28 font-bold">
-                      ราคาประเมิน/หน่วย
-                      <br />
-                      <span className="text-[10px] font-normal">
-                        Unit Price
-                      </span>
+                    <th className="border border-slate-800 p-1.5 text-center w-12 font-bold">
+                      Unit
                     </th>
-                    <th className="border border-slate-800 p-2 text-center w-32 font-bold">
-                      จำนวนเงินรวม
-                      <br />
-                      <span className="text-[10px] font-normal">
-                        Total Amount
-                      </span>
+                    <th className="border border-slate-800 p-1.5 text-center w-20 font-bold">
+                      Unit Price
+                    </th>
+                    <th className="border border-slate-800 p-1.5 text-center w-24 font-bold">
+                      Amount
+                    </th>
+                    <th className="border border-slate-800 p-1.5 text-center w-20 font-bold">
+                      Remark
                     </th>
                   </tr>
                 </thead>
                 <tbody>
                   {prToPrint.items && prToPrint.items.length > 0 ? (
-                    prToPrint.items.map((item: PRItem, idx: number) => (
+                    prToPrint.items.map((item, idx) => (
                       <tr key={idx}>
-                        <td className="border-x border-slate-800 border-b p-2.5 text-center">
+                        <td className="border-x border-b border-slate-800 p-1.5 text-center">
                           {idx + 1}
                         </td>
-                        <td className="border-x border-slate-800 border-b  p-2.5 font-medium">
+                        <td className="border-x border-b border-slate-800 p-1.5 font-medium">
                           {item.description}
                         </td>
-                        <td className="border-x border-slate-800 border-b p-2.5 text-center">
+                        <td className="border-x border-b border-slate-800 p-1.5 text-center">
                           {item.quantity}
                         </td>
-                        <td className="border-x border-slate-800 border-b p-2.5 text-right">
+                        {/* สมมติว่ายังไม่มี Unit ใน DB ให้ใส่ - ไว้ก่อน */}
+                        <td className="border-x border-b border-slate-800 p-1.5 text-center">
+                          -
+                        </td>
+                        <td className="border-x border-b border-slate-800 p-1.5 text-right">
                           {Number(
                             item.estimated_price || item.unit_price || 0,
                           ).toLocaleString(undefined, {
                             minimumFractionDigits: 2,
                           })}
                         </td>
-                        <td className="border-x border-slate-800 border-b p-2.5 text-right font-medium">
+                        <td className="border-x border-b border-slate-800 p-1.5 text-right font-bold">
                           {(
                             Number(item.quantity) *
                             Number(item.estimated_price || item.unit_price || 0)
@@ -827,12 +843,16 @@ export default function PRListPage() {
                             minimumFractionDigits: 2,
                           })}
                         </td>
+                        {/* คอลัมน์หมายเหตุรายตัว */}
+                        <td className="border-x border-b border-slate-800 p-1.5 text-center">
+                          -
+                        </td>
                       </tr>
                     ))
                   ) : (
                     <tr>
                       <td
-                        colSpan={5}
+                        colSpan={7}
                         className="border border-slate-800 p-6 text-center text-slate-500"
                       >
                         ไม่มีข้อมูลรายการสินค้า
@@ -840,15 +860,15 @@ export default function PRListPage() {
                     </tr>
                   )}
                 </tbody>
-                <tfoot>
-                  <tr className="bg-slate-50">
+                <tfoot className="bg-slate-100">
+                  <tr>
                     <td
-                      colSpan={4}
-                      className="border border-slate-800 p-2.5 text-right font-bold text-slate-800 uppercase"
+                      colSpan={5}
+                      className="border border-slate-800 p-2 text-right font-bold text-slate-800 uppercase"
                     >
-                      รวมยอดเงินประเมินสุทธิ (Net Total)
+                      Net Total
                     </td>
-                    <td className="border border-slate-800 p-2.5 text-right font-bold text-base">
+                    <td className="border border-slate-800 p-2 text-right font-bold text-base">
                       {prToPrint.items
                         ? prToPrint.items
                             .reduce(
@@ -867,67 +887,65 @@ export default function PRListPage() {
                             })
                         : "0.00"}
                     </td>
+                    <td className="border border-slate-800 p-2"></td>
                   </tr>
                 </tfoot>
               </table>
 
-              <div className="mt-4 mb-8 border border-slate-800 p-4 min-h-[80px]">
-                <p className="font-bold text-xs text-slate-800 underline mb-2 uppercase">
-                  หมายเหตุ / เหตุผลการขอซื้อ (Remark):
-                </p>
-                <p className="text-xs text-slate-700 leading-relaxed">
+              {/* 4. หมายเหตุรวม (Remark) */}
+              <div className="border border-slate-800 p-2 mb-2 min-h-[50px] bg-slate-50">
+                <span className="font-bold text-[10px] text-slate-800 uppercase underline mr-2">
+                  Remark:
+                </span>
+                <span className="text-xs text-slate-700">
                   {prToPrint.remark || "-"}
-                </p>
+                </span>
               </div>
 
-              <div className="mt-4 p-3 bg-slate-50 border border-slate-200 rounded-sm text-[10px] text-slate-500 leading-relaxed">
-                <p className="font-bold text-slate-700 mb-1">
-                  ระเบียบและข้อตกลงในการขออนุมัติสั่งซื้อ (Terms & Conditions):
-                </p>
-                <ul className="list-disc pl-4 space-y-0.5">
-                  <li>
-                    การขอสั่งซื้อสินค้าที่มีมูลค่าเกิน 10,000 บาท
-                    ผู้ขอเบิกจะต้องแนบใบเสนอราคา (Quotation) อย่างน้อย 2
-                    ร้านค้าเพื่อเปรียบเทียบ
-                  </li>
-                  <li>
-                    เอกสารฉบับนี้จะสมบูรณ์ก็ต่อเมื่อมีการลงนามจากผู้มีอำนาจอนุมัติครบถ้วนตามระเบียบของบริษัท
-                  </li>
-                  <li>
-                    ฝ่ายจัดซื้อจะใช้เวลาดำเนินการสั่งซื้อภายใน 3-5 วันทำการ
-                    หลังจากเอกสารได้รับการอนุมัติ
-                  </li>
-                </ul>
+              {/* 5. ส่วนลงนาม (Signatures - เป็นกล่อง 3 ใบ) */}
+              <div className="grid grid-cols-3 gap-4 mt-auto mb-6 text-[10px] text-center">
+                {/* กล่องที่ 1 */}
+                <div className="border border-slate-800 rounded-sm flex flex-col">
+                  <div className="bg-slate-100 border-b border-slate-800 p-1.5 font-bold uppercase">
+                    Requested By
+                  </div>
+                  <div className="flex-1 min-h-[50px] flex items-center justify-center text-slate-300">
+                    (Signature)
+                  </div>
+                  <div className="p-1 border-t border-slate-800">
+                    Date: ______/______/______
+                  </div>
+                </div>
+                {/* กล่องที่ 2 */}
+                <div className="border border-slate-800 rounded-sm flex flex-col">
+                  <div className="bg-slate-100 border-b border-slate-800 p-1.5 font-bold uppercase">
+                    Checked By
+                  </div>
+                  <div className="flex-1 min-h-[50px] flex items-center justify-center text-slate-300">
+                    (Signature)
+                  </div>
+                  <div className="p-1 border-t border-slate-800">
+                    Date: ______/______/______
+                  </div>
+                </div>
+                {/* กล่องที่ 3 */}
+                <div className="border border-slate-800 rounded-sm flex flex-col">
+                  <div className="bg-slate-100 border-b border-slate-800 p-1.5 font-bold uppercase">
+                    Approved By
+                  </div>
+                  <div className="flex-1 min-h-[50px] flex items-center justify-center text-slate-300">
+                    (Signature)
+                  </div>
+                  <div className="p-1 border-t border-slate-800">
+                    Date: ______/______/______
+                  </div>
+                </div>
               </div>
-              {/* 4. ส่วนลงนาม (Signatures) */}
-              <div className="grid grid-cols-3 gap-6 mt-auto text-xs text-center">
-                <div>
-                  <div className="border-b border-slate-800 w-40 mx-auto mb-2 h-10"></div>
-                  <p className="font-bold text-slate-800">
-                    ผู้ขอเบิก (Requested By)
-                  </p>
-                  <p className="mt-1 text-slate-600">
-                    วันที่: ______/______/______
-                  </p>
-                </div>
-                <div>
-                  <div className="border-b border-slate-800 w-40 mx-auto mb-2 h-10"></div>
-                  <p className="font-bold text-slate-800">
-                    ผู้ตรวจสอบ (Checked By)
-                  </p>
-                  <p className="mt-1 text-slate-600">
-                    วันที่: ______/______/______
-                  </p>
-                </div>
-                <div>
-                  <div className="border-b border-slate-800 w-40 mx-auto mb-2 h-10"></div>
-                  <p className="font-bold text-slate-800">
-                    ผู้อนุมัติ (Approved By)
-                  </p>
-                  <p className="mt-1 text-slate-600">
-                    วันที่: ______/______/______
-                  </p>
-                </div>
+
+              {/* 6. Footer แจ้งเวลาพิมพ์ */}
+              <div className="absolute bottom-6 left-8 right-8 text-center text-[9px] text-slate-400 border-t border-slate-200 pt-2">
+                เอกสารฉบับนี้พิมพ์จากระบบ P2P System เมื่อวันที่{" "}
+                {currentPrintTime}
               </div>
             </>
           )}
