@@ -106,7 +106,6 @@ export default function POListPage() {
       result = result.filter(
         (po) =>
           po.po_no.toLowerCase().includes(lowerSearch) ||
-          po.pr_no.toLowerCase().includes(lowerSearch) ||
           getVendorName(po.vendor_id).toLowerCase().includes(lowerSearch),
       );
     }
@@ -165,11 +164,9 @@ export default function POListPage() {
   };
 
   const handleExportExcel = async () => {
-    // 1. สร้าง Workbook และ Worksheet
     const workbook = new ExcelJS.Workbook();
     const worksheet = workbook.addWorksheet("PO Report");
 
-    // 2. กำหนดความกว้างคอลัมน์
     worksheet.columns = [
       { width: 18 }, // A: เลขที่ PO
       { width: 18 }, // B: วันที่สั่งซื้อ
@@ -178,7 +175,6 @@ export default function POListPage() {
       { width: 20 }, // E: สถานะ
     ];
 
-    // 3. ใส่หัวกระดาษ (Company Header)
     worksheet.mergeCells("A1:E1");
     const titleCell = worksheet.getCell("A1");
     titleCell.value = "รายงานสรุปรายการใบสั่งซื้อ (Purchase Order Report)";
@@ -191,9 +187,8 @@ export default function POListPage() {
     dateCell.font = { size: 10, italic: true };
     dateCell.alignment = { vertical: "middle", horizontal: "center" };
 
-    worksheet.addRow([]); // เว้นบรรทัด
+    worksheet.addRow([]);
 
-    // 4. สร้างหัวตาราง (Table Header)
     const headerRow = worksheet.addRow([
       "เลขที่ PO",
       "วันที่สั่งซื้อ",
@@ -201,13 +196,14 @@ export default function POListPage() {
       "ยอดรวมสุทธิ (บาท)",
       "สถานะ",
     ]);
+
     headerRow.eachCell((cell) => {
       cell.fill = {
         type: "pattern",
         pattern: "solid",
-        fgColor: { argb: "FF1E293B" }, // พื้นหลังสี Slate-800
+        fgColor: { argb: "FF1E293B" },
       };
-      cell.font = { color: { argb: "FFFFFFFF" }, bold: true }; // ตัวหนังสือสีขาว
+      cell.font = { color: { argb: "FFFFFFFF" }, bold: true };
       cell.alignment = { vertical: "middle", horizontal: "center" };
       cell.border = {
         top: { style: "thin" },
@@ -217,7 +213,6 @@ export default function POListPage() {
       };
     });
 
-    // 5. ใส่ข้อมูลจากตาราง (Data Rows)
     let totalSum = 0;
     filteredList.forEach((po) => {
       totalSum += Number(po.total_amount);
@@ -229,13 +224,11 @@ export default function POListPage() {
         po.status,
       ]);
 
-      // จัด Format แต่ละเซลล์
-      row.getCell(1).alignment = { horizontal: "center" }; // เลขที่ PO
-      row.getCell(2).alignment = { horizontal: "center" }; // วันที่
-      row.getCell(4).numFmt = "#,##0.00"; // ยอดเงิน: ใส่ลูกน้ำและทศนิยม 2 ตำแหน่ง
-      row.getCell(5).alignment = { horizontal: "center" }; // สถานะ
+      row.getCell(1).alignment = { horizontal: "center" };
+      row.getCell(2).alignment = { horizontal: "center" };
+      row.getCell(4).numFmt = "#,##0.00";
+      row.getCell(5).alignment = { horizontal: "center" };
 
-      // ตีเส้นขอบทุกเซลล์
       row.eachCell((cell) => {
         cell.border = {
           top: { style: "thin" },
@@ -246,7 +239,6 @@ export default function POListPage() {
       });
     });
 
-    // 6. สรุปยอดรวมด้านล่าง (Summary Row)
     const summaryRow = worksheet.addRow([
       "",
       "",
@@ -256,10 +248,9 @@ export default function POListPage() {
     ]);
     summaryRow.getCell(3).font = { bold: true };
     summaryRow.getCell(3).alignment = { horizontal: "right" };
-    summaryRow.getCell(4).font = { bold: true, color: { argb: "FFDC2626" } }; // ยอดรวมสีแดง
+    summaryRow.getCell(4).font = { bold: true, color: { argb: "FFDC2626" } };
     summaryRow.getCell(4).numFmt = "#,##0.00";
 
-    // ตีเส้นคู่ (Double border) ปิดท้าย
     summaryRow.eachCell((cell, colNumber) => {
       if (colNumber === 3 || colNumber === 4) {
         cell.border = {
@@ -269,7 +260,6 @@ export default function POListPage() {
       }
     });
 
-    // 7. แปลงไฟล์และดาวน์โหลด
     const buffer = await workbook.xlsx.writeBuffer();
     const blob = new Blob([buffer], {
       type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -280,7 +270,6 @@ export default function POListPage() {
   return (
     <div className="min-h-screen bg-slate-50/50 p-6">
       <div className="max-w-7xl mx-auto space-y-6 animate-in fade-in duration-500">
-        {/* Header Section */}
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
@@ -307,7 +296,6 @@ export default function POListPage() {
           </div>
         </div>
 
-        {/* Filters Bar */}
         <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-col md:flex-row gap-4 items-center justify-between hover:shadow-md transition-shadow duration-300">
           <div className="relative flex-1 w-full max-w-md">
             <Search
@@ -347,7 +335,6 @@ export default function POListPage() {
           </div>
         </div>
 
-        {/* Main Table */}
         <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden hover:shadow-md transition-shadow duration-300">
           <div className="overflow-x-auto">
             <table className="w-full text-left">
@@ -355,7 +342,7 @@ export default function POListPage() {
                 <tr>
                   <th className="p-5 pl-6 font-bold">เลขที่ PO</th>
                   <th className="p-5 font-bold">วันที่สั่งซื้อ</th>
-                  <th className="p-5 font-bold">อ้างอิง PR</th>
+                  {/* 🌟 เอาคอลัมน์ อ้างอิง PR ออกจากตรงนี้ */}
                   <th className="p-5 font-bold">บริษัทผู้ขาย</th>
                   <th className="p-5 font-bold text-right">ยอดรวมสุทธิ</th>
                   <th className="p-5 font-bold text-center">สถานะ</th>
@@ -365,7 +352,7 @@ export default function POListPage() {
               <tbody className="divide-y divide-slate-100 text-sm">
                 {isLoading ? (
                   <tr>
-                    <td colSpan={7} className="p-12 text-center">
+                    <td colSpan={6} className="p-12 text-center">
                       <div className="flex flex-col items-center gap-3 text-slate-400">
                         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
                         <p className="font-medium">กำลังโหลดข้อมูล...</p>
@@ -374,7 +361,7 @@ export default function POListPage() {
                   </tr>
                 ) : currentItems.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="p-16 text-center text-slate-400">
+                    <td colSpan={6} className="p-16 text-center text-slate-400">
                       <div className="flex flex-col items-center gap-3">
                         <div className="p-4 bg-slate-50 rounded-full">
                           <PackageOpen size={40} className="text-slate-300" />
@@ -396,9 +383,6 @@ export default function POListPage() {
                       </td>
                       <td className="p-5 text-slate-600 font-medium">
                         {new Date(po.po_date).toLocaleDateString("th-TH")}
-                      </td>
-                      <td className="p-5 text-slate-600 font-medium">
-                        {po.pr_no}
                       </td>
                       <td className="p-5">
                         <div className="flex flex-col">
@@ -558,7 +542,9 @@ export default function POListPage() {
                 <table className="w-full text-left border-collapse bg-white">
                   <thead className="bg-slate-100/80 backdrop-blur-sm sticky top-0 shadow-sm text-xs uppercase tracking-wider text-slate-600 font-bold">
                     <tr>
-                      <th className="p-4 pl-6 border-b">รหัสสินค้า</th>
+                      {/* 🌟 1. เพิ่มหัวตาราง อ้างอิง PR ใน Modal */}
+                      <th className="p-4 pl-6 border-b w-32">อ้างอิง PR</th>
+                      <th className="p-4 border-b">รหัสสินค้า</th>
                       <th className="p-4 border-b">รายละเอียด</th>
                       <th className="p-4 border-b text-center">จำนวน</th>
                       <th className="p-4 border-b text-right">ราคา/หน่วย</th>
@@ -567,11 +553,12 @@ export default function POListPage() {
                       </th>
                     </tr>
                   </thead>
+
                   <tbody className="divide-y divide-slate-100">
                     {isItemsLoading ? (
                       <tr>
                         <td
-                          colSpan={5}
+                          colSpan={6}
                           className="py-16 text-center text-slate-400"
                         >
                           <div className="flex flex-col items-center gap-3">
@@ -585,7 +572,7 @@ export default function POListPage() {
                     ) : poItems.length === 0 ? (
                       <tr>
                         <td
-                          colSpan={5}
+                          colSpan={6}
                           className="py-16 text-center text-slate-400 font-medium"
                         >
                           ไม่พบรายการสินค้าในเอกสารนี้
@@ -597,8 +584,12 @@ export default function POListPage() {
                           key={idx}
                           className="hover:bg-slate-50 transition-colors"
                         >
-                          <td className="p-4 pl-6 text-slate-500 font-mono text-sm font-medium">
-                            {item.product_code}
+                          {/* 🌟 2. แสดงเลข PR ที่ดึงมา */}
+                          <td className="p-4 pl-6 text-slate-500 font-medium">
+                            {item.pr_no || "-"}
+                          </td>
+                          <td className="p-4 text-slate-500 font-mono text-sm font-medium">
+                            {item.product_code || "-"}
                           </td>
                           <td className="p-4 text-slate-800 font-bold">
                             {item.description || "-"}
@@ -620,7 +611,7 @@ export default function POListPage() {
                     <tfoot className="bg-slate-50 border-t border-slate-200">
                       <tr>
                         <td
-                          colSpan={4}
+                          colSpan={5}
                           className="p-5 text-right font-bold text-slate-500 uppercase tracking-wider"
                         >
                           ยอดรวมสุทธิของเอกสารนี้

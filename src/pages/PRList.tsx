@@ -188,25 +188,46 @@ export default function PRListPage() {
 
   // 🌟 ตกแต่ง Status Badge ให้พรีเมียมเหมือนหน้า PO
   const renderStatusBadge = (status: string) => {
-    switch (status.toLowerCase()) {
-      case "pending":
+    if (!status) return null;
+
+    const s = status.toLowerCase();
+
+    switch (s) {
+      case "pending": // สถานะของ PR Item ที่อนุมัติแล้ว
         return (
           <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-700 shadow-sm text-xs font-bold uppercase tracking-wider">
             {status}
           </div>
         );
-      case "approved":
+
+      case "approved": // สถานะของ PR Header
         return (
           <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 shadow-sm text-xs font-bold uppercase tracking-wider">
             {status}
           </div>
         );
-      case "po created":
+
+      case "issued": // สถานะเริ่มต้นของ PO
         return (
           <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-50 border border-indigo-200 text-indigo-700 shadow-sm text-xs font-bold uppercase tracking-wider">
+            PO Issued
+          </div>
+        );
+
+      case "ordered": // สถานะของสินค้าที่ถูก PO ไปแล้ว
+        return (
+          <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-50 border border-blue-200 text-blue-700 shadow-sm text-xs font-bold uppercase tracking-wider">
+            Ordered
+          </div>
+        );
+
+      case "goods received":
+        return (
+          <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-teal-50 border border-teal-200 text-teal-700 shadow-sm text-xs font-bold uppercase tracking-wider">
             {status}
           </div>
         );
+
       case "rejected":
       case "cancelled":
         return (
@@ -214,6 +235,7 @@ export default function PRListPage() {
             {status}
           </div>
         );
+
       default:
         return (
           <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-700 shadow-sm text-xs font-bold uppercase tracking-wider">

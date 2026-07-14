@@ -41,7 +41,6 @@ export interface IncomingPRItem {
 export interface POHeaderData {
   po_no: string;
   po_date: string;
-  pr_no: string;
   vendor_id: string;
   total_amount: number;
   status: string;
@@ -51,11 +50,14 @@ export interface POHeaderData {
 
 // ข้อมูลสินค้ารายการในใบ PO (ยุบรวม POItemData มาไว้ที่นี่)
 export interface POItem {
+  po_item_id?: number;
   product_code: string;
   description: string;
   ordered_qty: number;
   unit_price: number;
   line_total: number;
+  pr_item_id: number;
+  pr_no?: string;
 }
 
 export interface POData {

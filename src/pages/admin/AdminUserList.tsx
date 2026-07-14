@@ -9,6 +9,10 @@ import {
   CheckCircle2,
   AlertTriangle,
   KeyRound,
+  Pencil,
+  Copy,
+  Check,
+  Loader2,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import api from "../../services/api";
@@ -22,16 +26,32 @@ interface User {
   is_active: boolean;
 }
 
+interface Department {
+  id: number;
+  department_name: string;
+  department_code: string;
+}
+
 export default function AdminUserList() {
   const [users, setUsers] = useState<User[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(false); // ปุ่ม submit ฟอร์มเพิ่มผู้ใช้งาน
+  const [isTableLoading, setIsTableLoading] = useState(true); // 🌟 ใหม่: โหลดตารางรอบแรก
   const [openConfirmDuplicateModal, setOpenConfirmDuplicateModal] =
     useState(false);
 
   const [searchTerm, setSearchTerm] = useState("");
   const debouncedSearchTerm = useDebounce(searchTerm, 450);
   const [activeDropdown, setActiveDropdown] = useState<number | null>(null);
+
+  const [departments, setDepartments] = useState<Department[]>([]);
+  const [isDeptModalOpen, setIsDeptModalOpen] = useState(false);
+
+  const [isEditUserModalOpen, setIsEditUserModalOpen] = useState(false);
+  const [editingUser, setEditingUser] = useState<User | null>(null);
+
+  const [newDeptName, setNewDeptName] = useState("");
+  const [newDeptCode, setNewDeptCode] = useState("");
 
   const [resetPasswordModal, setResetPasswordModal] = useState<{
     isOpen: boolean;
@@ -41,7 +61,12 @@ export default function AdminUserList() {
     userId: null,
   });
 
-  // 🌟 State ใหม่สำหรับควบคุม Pop-up ยืนยันการเปลี่ยนสถานะ
+  // 🌟 ใหม่: เก็บรหัสผ่านชั่วคราวที่สุ่มได้จาก backend เพื่อโชว์ให้ Admin คัดลอก
+  const [tempPasswordResult, setTempPasswordResult] = useState<string | null>(
+    null,
+  );
+  const [isCopied, setIsCopied] = useState(false);
+
   const [confirmModal, setConfirmModal] = useState<{
     isOpen: boolean;
     userId: number | null;
@@ -90,17 +115,31 @@ export default function AdminUserList() {
     } catch (error) {
       console.error("Fetch users error:", error);
       toast.error("ไม่สามารถดึงข้อมูลผู้ใช้งานได้");
+    } finally {
+      setIsTableLoading(false);
+    }
+  }, []);
+
+  const fetchDepartments = useCallback(async () => {
+    try {
+      const res = await api.get("/departments");
+      setDepartments(res.data);
+    } catch {
+      toast.error("ไม่สามารถดึงข้อมูลแผนกได้");
     }
   }, []);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    fetchUsers();
-  }, [fetchUsers]);
+    const loadInitialData = async () => {
+      await Promise.all([fetchUsers(), fetchDepartments()]);
+    };
+
+    loadInitialData();
+  }, [fetchUsers, fetchDepartments]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsLoading(true); // เริ่มโหลด
+    setIsLoading(true);
 
     try {
       await api.post("/users", formData);
@@ -114,7 +153,6 @@ export default function AdminUserList() {
       });
       fetchUsers();
     } catch (error: unknown) {
-      // 🌟 ใส่ setIsLoading(false) ตรงนี้ด้วย เพื่อปลดล็อคปุ่มทันทีที่เกิด Error
       setIsLoading(false);
 
       if (error instanceof Error && "response" in error) {
@@ -123,7 +161,7 @@ export default function AdminUserList() {
         };
 
         if (err.response?.status === 409) {
-          setOpenConfirmDuplicateModal(true); // เปิด Modal แจ้งเตือน
+          setOpenConfirmDuplicateModal(true);
         } else {
           toast.error(err.response?.data?.message || "เกิดข้อผิดพลาด");
         }
@@ -131,26 +169,22 @@ export default function AdminUserList() {
         toast.error("เกิดข้อผิดพลาดที่ไม่คาดคิด");
       }
     } finally {
-      // โค้ดส่วนนี้ยังคงไว้เหมือนเดิมครับ (เป็น Safety net)
       setIsLoading(false);
     }
   };
 
-  // 🌟 ฟังก์ชันเมื่อกดปุ่มใน Dropdown (จะเปิด Pop-up แทนการยิง API ทันที)
   const handleToggleClick = (userId: number, currentStatus: boolean) => {
     setConfirmModal({
       isOpen: true,
       userId: userId,
-      isSuspending: currentStatus, // ถ้า currentStatus เป็น true แสดงว่ากำลังจะกด "ระงับ"
+      isSuspending: currentStatus,
     });
-    setActiveDropdown(null); // ปิด Dropdown ฟันเฟือง
+    setActiveDropdown(null);
   };
 
-  // 🌟 ฟังก์ชันยิง API จริงๆ (จะถูกเรียกเมื่อกดปุ่ม "ยืนยัน" ใน Pop-up)
   const confirmToggleStatus = async () => {
     if (!confirmModal.userId) return;
 
-    // 🌟 1. Optimistic Update: เปลี่ยน state ในหน้าจอก่อนเลย
     setUsers((prevUsers) =>
       prevUsers.map((user) =>
         user.user_id === confirmModal.userId
@@ -159,10 +193,8 @@ export default function AdminUserList() {
       ),
     );
 
-    // ปิด Modal ทันที
     setConfirmModal({ isOpen: false, userId: null, isSuspending: true });
 
-    // 🌟 2. ยิง API (ทำงานเบื้องหลัง)
     try {
       await api.put(`/users/${confirmModal.userId}/status`, {
         is_active: !confirmModal.isSuspending,
@@ -171,15 +203,10 @@ export default function AdminUserList() {
       toast.success(
         confirmModal.isSuspending ? "ระงับบัญชีสำเร็จ" : "คืนสิทธิ์สำเร็จ",
       );
-
-      // 🌟 3. (Optional) Fetch ข้อมูลใหม่เพื่อความชัวร์ (ถ้าข้อมูลเปลี่ยนจากคนอื่น)
-      // fetchUsers();
     } catch (error) {
       console.error(error);
       toast.error("เกิดข้อผิดพลาดในการเปลี่ยนสถานะ");
-
-      // ถ้า API พัง เราก็ Revert ค่ากลับมาเหมือนเดิม (กันเหนียว)
-      fetchUsers();
+      fetchUsers(); // API พัง ต้อง revert ค่า optimistic update กลับมา
     }
   };
 
@@ -193,16 +220,59 @@ export default function AdminUserList() {
     if (!resetPasswordModal.userId) return;
 
     try {
-      // เรียกใช้ API หลังบ้านที่เราเตรียมไว้
-      await api.put(`/users/${resetPasswordModal.userId}/reset-password`);
-      toast.success("รีเซ็ตรหัสผ่านเป็น 123456 เรียบร้อยแล้ว");
+      // 🌟 backend สุ่มรหัสผ่านชั่วคราวให้ใหม่ทุกครั้ง (ไม่ใช่ "123456" คงที่แล้ว)
+      const response = await api.put(
+        `/users/${resetPasswordModal.userId}/reset-password`,
+      );
+      setTempPasswordResult(response.data?.temporaryPassword ?? null);
     } catch (error) {
       console.error(error);
       toast.error("เกิดข้อผิดพลาดในการรีเซ็ตรหัสผ่าน");
     } finally {
-      // ปิด Pop-up
       setResetPasswordModal({ isOpen: false, userId: null });
     }
+  };
+
+  const handleCopyPassword = async () => {
+    if (!tempPasswordResult) return;
+    try {
+      await navigator.clipboard.writeText(tempPasswordResult);
+      setIsCopied(true);
+      toast.success("คัดลอกรหัสผ่านแล้ว");
+      setTimeout(() => setIsCopied(false), 2000);
+    } catch {
+      toast.error("คัดลอกไม่สำเร็จ กรุณาคัดลอกด้วยตนเอง");
+    }
+  };
+
+  const handleEditClick = (user: User) => {
+    setEditingUser(user);
+    setIsEditUserModalOpen(true);
+    setActiveDropdown(null);
+  };
+
+  const handleUpdateUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingUser) return;
+
+    try {
+      await api.put(`/users/${editingUser.user_id}`, {
+        role: editingUser.role,
+        department: editingUser.department,
+      });
+      toast.success("อัปเดตข้อมูลพนักงานสำเร็จ");
+      setIsEditUserModalOpen(false);
+      fetchUsers();
+    } catch {
+      toast.error("อัปเดตข้อมูลล้มเหลว");
+    }
+  };
+
+  // ป้ายสี Role: Admin = แดง, ตำแหน่งหัวหน้า (มีคำว่า Head) = คราม, นอกนั้น = เทากลาง
+  const getRoleBadgeStyle = (role: string) => {
+    if (role === "Admin") return "bg-rose-100 text-rose-700";
+    if (role?.includes("Head")) return "bg-indigo-100 text-indigo-700";
+    return "bg-slate-100 text-slate-600";
   };
 
   return (
@@ -233,6 +303,14 @@ export default function AdminUserList() {
           </div>
 
           <button
+            onClick={() => setIsDeptModalOpen(true)}
+            className="bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 px-4 py-2.5 rounded-xl font-bold transition-all flex items-center gap-2 shadow-sm shrink-0 active:scale-95"
+          >
+            <Settings size={18} />
+            <span className="hidden sm:inline">จัดการแผนก</span>
+          </button>
+
+          <button
             onClick={() => setIsModalOpen(true)}
             className="bg-rose-600 hover:bg-rose-700 text-white px-4 py-2.5 rounded-xl font-bold transition-all flex items-center gap-2 shadow-sm shrink-0 active:scale-95"
           >
@@ -256,116 +334,14 @@ export default function AdminUserList() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {filteredUsers.map((user) => (
-                <tr
-                  key={user.user_id}
-                  className="hover:bg-slate-50 transition-colors"
-                >
-                  <td className="p-4 pl-6 font-bold text-slate-400">
-                    #{user.user_id}
-                  </td>
-                  <td className="p-4 font-bold text-slate-700">
-                    {user.username}
-                  </td>
-                  <td className="p-4">
-                    <span
-                      className={`px-3 py-1 rounded-full text-xs font-bold ${
-                        user.department === "admin"
-                          ? "bg-rose-100 text-rose-700"
-                          : user.department === "IT"
-                            ? "bg-blue-100 text-blue-700"
-                            : user.department === "Accounting"
-                              ? "bg-amber-100 text-amber-700"
-                              : user.department === "Warehouse"
-                                ? "bg-emerald-100 text-emerald-700"
-                                : user.department === "Purchasing"
-                                  ? "bg-violet-100 text-violet-700"
-                                  : "bg-slate-100 text-slate-700"
-                      }`}
-                    >
-                      {user.department.toUpperCase()}
-                    </span>
-                  </td>
-                  <td className="p-4 text-center">
-                    <span className="text-sm font-bold text-slate-500">
-                      {user.role || "N/A"}
-                    </span>
-                  </td>
-                  <td className="p-4 text-center">
-                    <span
-                      className={`px-3 py-1 rounded-full text-xs font-bold flex items-center justify-center gap-1 w-max mx-auto ${
-                        user.is_active !== false
-                          ? "bg-emerald-100 text-emerald-700"
-                          : "bg-slate-200 text-slate-500"
-                      }`}
-                    >
-                      {user.is_active !== false ? "ใช้งานปกติ" : "ถูกระงับ"}
-                    </span>
-                  </td>
-
-                  <td className="p-4 pr-6 text-right relative">
-                    <button
-                      onClick={() =>
-                        setActiveDropdown(
-                          activeDropdown === user.user_id ? null : user.user_id,
-                        )
-                      }
-                      className="text-slate-400 hover:text-slate-700 p-2 rounded-lg hover:bg-slate-100 transition-colors"
-                    >
-                      <Settings size={20} />
-                    </button>
-
-                    {activeDropdown === user.user_id && (
-                      <>
-                        {/* 🌟 1. เพิ่ม Overlay ใสๆ ไว้ดักการคลิกพื้นที่ว่าง */}
-                        <div
-                          className="fixed inset-0 z-10"
-                          onClick={() => setActiveDropdown(null)}
-                        ></div>
-
-                        {/* 🌟 2. เมนู Dropdown เดิมของคุณ (เปลี่ยน z-20 ให้สูงกว่า overlay) */}
-                        <div className="absolute right-12 top-10 bg-white border border-slate-200 shadow-xl rounded-xl p-2 z-20 flex flex-col gap-1 min-w-[140px] animate-in slide-in-from-top-2 fade-in">
-                          <button
-                            onClick={() => {
-                              setResetPasswordModal({
-                                isOpen: true,
-                                userId: user.user_id,
-                              });
-                              setActiveDropdown(null);
-                            }}
-                            className="flex items-center gap-2 w-full text-left px-3 py-2.5 rounded-lg text-sm font-bold text-blue-600 hover:bg-blue-50 transition-colors"
-                          >
-                            <KeyRound size={16} /> รีเซ็ตรหัส
-                          </button>
-
-                          <div className="h-px bg-slate-100 my-1"></div>
-
-                          {user.is_active !== false ? (
-                            <button
-                              onClick={() =>
-                                handleToggleClick(user.user_id, true)
-                              }
-                              className="flex items-center gap-2 w-full text-left px-3 py-2.5 rounded-lg text-sm font-bold text-rose-600 hover:bg-rose-50 transition-colors relative z-30" // เพิ่ม z-30 กันเหนียว
-                            >
-                              <Power size={16} /> ระงับบัญชี
-                            </button>
-                          ) : (
-                            <button
-                              onClick={() =>
-                                handleToggleClick(user.user_id, false)
-                              }
-                              className="flex items-center gap-2 w-full text-left px-3 py-2.5 rounded-lg text-sm font-bold text-emerald-600 hover:bg-emerald-50 transition-colors relative z-30"
-                            >
-                              <CheckCircle2 size={16} /> คืนสิทธิ์
-                            </button>
-                          )}
-                        </div>
-                      </>
-                    )}
+              {isTableLoading ? (
+                <tr>
+                  <td colSpan={6} className="p-12 text-center text-slate-400">
+                    <Loader2 className="mx-auto mb-3 animate-spin" size={28} />
+                    กำลังโหลดข้อมูลผู้ใช้งาน...
                   </td>
                 </tr>
-              ))}
-              {filteredUsers.length === 0 && (
+              ) : filteredUsers.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="p-12 text-center text-slate-500">
                     {searchTerm ? (
@@ -381,13 +357,139 @@ export default function AdminUserList() {
                     )}
                   </td>
                 </tr>
+              ) : (
+                filteredUsers.map((user) => (
+                  <tr
+                    key={user.user_id}
+                    className="hover:bg-slate-50 transition-colors"
+                  >
+                    <td className="p-4 pl-6 font-bold text-slate-400">
+                      #{user.user_id}
+                    </td>
+                    <td className="p-4 font-bold text-slate-700">
+                      <div className="flex items-center gap-3">
+                        <div className="w-9 h-9 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center text-xs font-bold shrink-0">
+                          {user.username.slice(0, 2).toUpperCase()}
+                        </div>
+                        {user.username}
+                      </div>
+                    </td>
+                    <td className="p-4">
+                      <span
+                        className={`px-3 py-1 rounded-full text-xs font-bold ${
+                          user.department === "admin"
+                            ? "bg-rose-100 text-rose-700"
+                            : user.department === "IT"
+                              ? "bg-blue-100 text-blue-700"
+                              : user.department === "Accounting"
+                                ? "bg-amber-100 text-amber-700"
+                                : user.department === "Warehouse"
+                                  ? "bg-emerald-100 text-emerald-700"
+                                  : user.department === "Purchasing"
+                                    ? "bg-violet-100 text-violet-700"
+                                    : "bg-slate-100 text-slate-700"
+                        }`}
+                      >
+                        {user.department.toUpperCase()}
+                      </span>
+                    </td>
+                    <td className="p-4 text-center">
+                      <span
+                        className={`px-3 py-1 rounded-full text-xs font-bold ${getRoleBadgeStyle(user.role)}`}
+                      >
+                        {user.role || "N/A"}
+                      </span>
+                    </td>
+                    <td className="p-4 text-center">
+                      <span
+                        className={`px-3 py-1 rounded-full text-xs font-bold flex items-center justify-center gap-1 w-max mx-auto ${
+                          user.is_active !== false
+                            ? "bg-emerald-100 text-emerald-700"
+                            : "bg-slate-200 text-slate-500"
+                        }`}
+                      >
+                        {user.is_active !== false ? "ใช้งานปกติ" : "ถูกระงับ"}
+                      </span>
+                    </td>
+
+                    <td className="p-4 pr-6 text-right relative">
+                      <button
+                        onClick={() =>
+                          setActiveDropdown(
+                            activeDropdown === user.user_id
+                              ? null
+                              : user.user_id,
+                          )
+                        }
+                        className="text-slate-400 hover:text-slate-700 p-2 rounded-lg hover:bg-slate-100 transition-colors"
+                      >
+                        <Settings size={20} />
+                      </button>
+
+                      {activeDropdown === user.user_id && (
+                        <>
+                          <div
+                            className="fixed inset-0 z-10"
+                            onClick={() => setActiveDropdown(null)}
+                          ></div>
+
+                          <div className="absolute right-12 top-10 bg-white border border-slate-200 shadow-xl rounded-xl p-2 z-20 flex flex-col gap-1 min-w-[170px] animate-in slide-in-from-top-2 fade-in">
+                            <button
+                              onClick={() => handleEditClick(user)}
+                              className="flex items-center gap-2 w-full text-left px-3 py-2.5 rounded-lg text-sm font-bold text-slate-600 hover:bg-slate-100 transition-colors"
+                            >
+                              <Pencil size={16} /> แก้ไขข้อมูล
+                            </button>
+
+                            <button
+                              onClick={() => {
+                                setResetPasswordModal({
+                                  isOpen: true,
+                                  userId: user.user_id,
+                                });
+                                setActiveDropdown(null);
+                              }}
+                              className="flex items-center gap-2 w-full text-left px-3 py-2.5 rounded-lg text-sm font-bold text-blue-600 hover:bg-blue-50 transition-colors"
+                            >
+                              <KeyRound size={16} /> รีเซ็ตรหัส
+                            </button>
+
+                            <div className="h-px bg-slate-100 my-1"></div>
+
+                            {user.is_active !== false ? (
+                              <button
+                                onClick={() =>
+                                  handleToggleClick(user.user_id, true)
+                                }
+                                className="flex items-center gap-2 w-full text-left px-3 py-2.5 rounded-lg text-sm font-bold text-rose-600 hover:bg-rose-50 transition-colors"
+                              >
+                                <Power size={16} /> ระงับบัญชี
+                              </button>
+                            ) : (
+                              <button
+                                onClick={() =>
+                                  handleToggleClick(user.user_id, false)
+                                }
+                                className="flex items-center gap-2 w-full text-left px-3 py-2.5 rounded-lg text-sm font-bold text-emerald-600 hover:bg-emerald-50 transition-colors"
+                              >
+                                <CheckCircle2 size={16} /> คืนสิทธิ์
+                              </button>
+                            )}
+                          </div>
+                        </>
+                      )}
+                    </td>
+                  </tr>
+                ))
               )}
             </tbody>
           </table>
         </div>
       </div>
 
-      {/* 🌟 Modal ยืนยันการระงับ/คืนสิทธิ์ */}
+      {/* ========================================= */}
+      {/* Modal: ยืนยันการระงับ/คืนสิทธิ์ */}
+      {/* ========================================= */}
       {confirmModal.isOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 text-center animate-in zoom-in-95">
@@ -438,7 +540,9 @@ export default function AdminUserList() {
         </div>
       )}
 
-      {/* 🌟 Modal ยืนยันการรีเซ็ตรหัสผ่าน */}
+      {/* ========================================= */}
+      {/* Modal: ยืนยันการรีเซ็ตรหัสผ่าน */}
+      {/* ========================================= */}
       {resetPasswordModal.isOpen && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 text-center animate-in zoom-in-95">
@@ -449,8 +553,8 @@ export default function AdminUserList() {
               ยืนยันการรีเซ็ตรหัสผ่าน?
             </h3>
             <p className="text-slate-500 text-sm mb-6 px-2">
-              รหัสผ่านของผู้ใช้งานรายนี้จะถูกเปลี่ยนกลับไปเป็น
-              <span className="font-bold text-slate-800 mx-1">123456</span>
+              ระบบจะสุ่มรหัสผ่านชั่วคราวใหม่ให้อัตโนมัติ
+              และผู้ใช้งานจะต้องเปลี่ยนรหัสผ่านทันทีที่เข้าสู่ระบบครั้งถัดไป
               คุณแน่ใจหรือไม่?
             </p>
             <div className="flex gap-3">
@@ -473,7 +577,54 @@ export default function AdminUserList() {
         </div>
       )}
 
-      {/* Modal เพิ่มผู้ใช้งาน (โค้ดเหมือนเดิมทุกประการ) */}
+      {/* ========================================= */}
+      {/* Modal: แสดงรหัสผ่านชั่วคราวที่สุ่มได้ (ใหม่) */}
+      {/* ========================================= */}
+      {tempPasswordResult && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 text-center animate-in zoom-in-95">
+            <div className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 bg-emerald-100 text-emerald-600">
+              <KeyRound size={32} />
+            </div>
+            <h3 className="text-xl font-bold text-slate-800 mb-2">
+              รีเซ็ตรหัสผ่านสำเร็จ
+            </h3>
+            <p className="text-slate-500 text-sm mb-4 px-2">
+              คัดลอกรหัสผ่านนี้ไปแจ้งผู้ใช้งาน
+              หน้าต่างนี้จะไม่แสดงรหัสซ้ำอีกหลังปิดไป
+            </p>
+            <div className="flex items-center gap-2 mb-6 bg-slate-50 border border-slate-200 rounded-xl p-3">
+              <code className="flex-1 text-left font-mono font-bold text-slate-800 tracking-wide select-all">
+                {tempPasswordResult}
+              </code>
+              <button
+                onClick={handleCopyPassword}
+                className="shrink-0 p-2 rounded-lg bg-white border border-slate-200 hover:bg-slate-100 transition-colors text-slate-600"
+                title="คัดลอก"
+              >
+                {isCopied ? (
+                  <Check size={16} className="text-emerald-600" />
+                ) : (
+                  <Copy size={16} />
+                )}
+              </button>
+            </div>
+            <button
+              onClick={() => {
+                setTempPasswordResult(null);
+                setIsCopied(false);
+              }}
+              className="w-full py-2.5 bg-slate-800 hover:bg-slate-900 text-white font-bold rounded-xl transition-colors"
+            >
+              ปิดหน้าต่างนี้
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================= */}
+      {/* Modal: เพิ่มผู้ใช้งาน */}
+      {/* ========================================= */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden animate-in zoom-in-95">
@@ -513,7 +664,7 @@ export default function AdminUserList() {
                 <input
                   type="password"
                   required
-                  minLength={6} // 🌟 เพิ่มตรงนี้
+                  minLength={6}
                   value={formData.password}
                   onChange={(e) =>
                     setFormData({ ...formData, password: e.target.value })
@@ -591,7 +742,6 @@ export default function AdminUserList() {
                       <input
                         type="radio"
                         name="role"
-                        // ตั้งชื่อ Role ตามแผนก เช่น Finance, Purchaser, Receiver
                         value={
                           formData.department === "Accounting"
                             ? "Finance"
@@ -601,7 +751,7 @@ export default function AdminUserList() {
                                 ? "Receiver"
                                 : "Admin"
                         }
-                        checked={!formData.role.includes("Head")} // ถ้าไม่มีคำว่า Head ให้ถือว่าเป็นพนักงานทั่วไป
+                        checked={!formData.role.includes("Head")}
                         onChange={(e) =>
                           setFormData({ ...formData, role: e.target.value })
                         }
@@ -615,7 +765,6 @@ export default function AdminUserList() {
                       <input
                         type="radio"
                         name="role"
-                        // เติมคำว่า _Head ต่อท้าย เช่น Finance_Head, Purchaser_Head
                         value={
                           formData.department === "Accounting"
                             ? "Finance_Head"
@@ -625,7 +774,7 @@ export default function AdminUserList() {
                                 ? "Receiver_Head"
                                 : "Admin"
                         }
-                        checked={formData.role.includes("Head")} // ถ้ามีคำว่า Head แสดงว่าเป็นหัวหน้า
+                        checked={formData.role.includes("Head")}
                         onChange={(e) =>
                           setFormData({ ...formData, role: e.target.value })
                         }
@@ -635,26 +784,6 @@ export default function AdminUserList() {
                         หัวหน้าแผนกเฉพาะทาง (ทำเอกสาร + อนุมัติ PR ได้)
                       </span>
                     </label>
-                  </div>
-                </div>
-              )}
-              {/* เพิ่ม Modal สำหรับแจ้งเตือนว่าข้อมูลซ้ำ */}
-              {openConfirmDuplicateModal && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in">
-                  <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 text-center animate-in zoom-in-95">
-                    {/* ใส่เนื้อหาแจ้งเตือนตรงนี้ */}
-                    <h3 className="text-xl font-bold text-rose-600 mb-2">
-                      ข้อมูลซ้ำ!
-                    </h3>
-                    <p className="text-slate-600 mb-6">
-                      มีผู้ใช้งานชื่อนี้อยู่ในระบบแล้ว
-                    </p>
-                    <button
-                      onClick={() => setOpenConfirmDuplicateModal(false)}
-                      className="w-full py-2.5 bg-slate-100 hover:bg-slate-200 font-bold rounded-xl"
-                    >
-                      ตกลง
-                    </button>
                   </div>
                 </div>
               )}
@@ -673,6 +802,207 @@ export default function AdminUserList() {
                   className="flex-1 py-3 px-4 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-xl transition-colors shadow-sm disabled:opacity-50"
                 >
                   {isLoading ? "กำลังบันทึก..." : "ยืนยันการเพิ่ม"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================= */}
+      {/* Modal: แจ้งเตือนข้อมูลซ้ำ */}
+      {/* ========================================= */}
+      {openConfirmDuplicateModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-sm text-center">
+            <h3 className="text-xl font-bold text-rose-600 mb-2">ข้อมูลซ้ำ!</h3>
+            <p className="text-slate-600 mb-6">
+              มีผู้ใช้งานชื่อนี้อยู่ในระบบแล้ว
+            </p>
+            <button
+              onClick={() => setOpenConfirmDuplicateModal(false)}
+              className="w-full py-2.5 bg-slate-100 hover:bg-slate-200 font-bold rounded-xl"
+            >
+              ตกลง
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================= */}
+      {/* Modal: จัดการแผนก (Manage Departments) */}
+      {/* ========================================= */}
+      {isDeptModalOpen && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white p-6 rounded-xl w-full max-w-lg max-h-[80vh] flex flex-col">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-bold">จัดการแผนก (Departments)</h2>
+              <button
+                onClick={() => setIsDeptModalOpen(false)}
+                className="text-slate-500 hover:text-slate-800"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="flex gap-2 mb-4 bg-slate-50 p-3 rounded border">
+              <input
+                type="text"
+                placeholder="ชื่อแผนก (เช่น Information Technology)"
+                className="flex-1 p-2 border rounded text-sm outline-none focus:border-blue-500"
+                value={newDeptName}
+                onChange={(e) => setNewDeptName(e.target.value)}
+              />
+              <input
+                type="text"
+                placeholder="ตัวย่อ (เช่น IT)"
+                className="w-24 p-2 border rounded text-sm outline-none focus:border-blue-500"
+                value={newDeptCode}
+                onChange={(e) => setNewDeptCode(e.target.value)}
+              />
+              <button
+                className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded text-sm font-bold transition-colors"
+                onClick={async () => {
+                  try {
+                    await api.post("/departments", {
+                      department_name: newDeptName,
+                      department_code: newDeptCode,
+                    });
+                    toast.success("เพิ่มแผนกสำเร็จ");
+                    setNewDeptName("");
+                    setNewDeptCode("");
+                    fetchDepartments();
+                  } catch {
+                    toast.error("เพิ่มแผนกล้มเหลว (อาจมีชื่อซ้ำ)");
+                  }
+                }}
+              >
+                เพิ่ม
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto border rounded">
+              <table className="w-full text-left text-sm">
+                <thead className="bg-slate-100 sticky top-0">
+                  <tr>
+                    <th className="p-2 border-b">ตัวย่อ</th>
+                    <th className="p-2 border-b">ชื่อแผนก</th>
+                    <th className="p-2 border-b text-center">จัดการ</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {departments.map((dept) => (
+                    <tr key={dept.id} className="hover:bg-slate-50">
+                      <td className="p-2 border-b font-bold">
+                        {dept.department_code}
+                      </td>
+                      <td className="p-2 border-b">{dept.department_name}</td>
+                      <td className="p-2 border-b text-center">
+                        <button
+                          onClick={async () => {
+                            if (
+                              window.confirm(
+                                `ต้องการระงับแผนก ${dept.department_code} หรือไม่?`,
+                              )
+                            ) {
+                              await api.delete(`/departments/${dept.id}`);
+                              fetchDepartments();
+                            }
+                          }}
+                          className="text-red-500 hover:text-red-700 hover:underline text-xs font-bold"
+                        >
+                          ระงับ
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================= */}
+      {/* Modal: แก้ไขพนักงาน (Edit User) */}
+      {/* ========================================= */}
+      {isEditUserModalOpen && editingUser && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl w-full max-w-md overflow-hidden shadow-2xl">
+            <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+              <h2 className="text-xl font-bold text-slate-800">
+                แก้ไขข้อมูลพนักงาน
+              </h2>
+              <button
+                onClick={() => setIsEditUserModalOpen(false)}
+                className="text-slate-400 hover:text-slate-600"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <form
+              onSubmit={handleUpdateUser}
+              className="p-6 flex flex-col gap-5"
+            >
+              <div>
+                <label className="block text-sm font-medium mb-1 text-slate-700">
+                  แผนก (Department)
+                </label>
+                <select
+                  value={editingUser.department}
+                  onChange={(e) =>
+                    setEditingUser({
+                      ...editingUser,
+                      department: e.target.value,
+                    })
+                  }
+                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg outline-none focus:border-blue-500"
+                  required
+                >
+                  <option value="" disabled>
+                    เลือกแผนก...
+                  </option>
+                  {departments.map((dept) => (
+                    <option key={dept.id} value={dept.department_name}>
+                      {dept.department_name} ({dept.department_code})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1 text-slate-700">
+                  ระดับสิทธิ์ (Role)
+                </label>
+                <select
+                  value={editingUser.role}
+                  onChange={(e) =>
+                    setEditingUser({ ...editingUser, role: e.target.value })
+                  }
+                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg outline-none focus:border-blue-500"
+                  required
+                >
+                  <option value="Requester">พนักงานขอเบิก (Requester)</option>
+                  <option value="Head">หัวหน้าแผนก (Head)</option>
+                  <option value="Purchaser">ฝ่ายจัดซื้อ (Purchaser)</option>
+                  <option value="Manager">ผู้จัดการ (Manager)</option>
+                </select>
+              </div>
+
+              <div className="pt-2 flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => setIsEditUserModalOpen(false)}
+                  className="flex-1 py-3 px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl transition-colors"
+                >
+                  ยกเลิก
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 py-3 px-4 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl transition-colors shadow-sm"
+                >
+                  บันทึกการแก้ไข
                 </button>
               </div>
             </form>
